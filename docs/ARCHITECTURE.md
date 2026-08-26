@@ -21,18 +21,18 @@ NFL sync service -> fixtures, Sleeper metadata/injuries, nflverse schedule/stats
 
 ## Ownership and boundaries
 
-- `app/api` validates transport input, enforces commissioner authentication, calls services, and
+- `apps/api/app/api` validates transport input, enforces commissioner authentication, calls services, and
   serializes responses. Business rules do not belong in controllers.
-- `app/services` owns league rules and transaction boundaries: unique draft selections, roster
+- `apps/api/app/services` owns league rules and transaction boundaries: unique draft selections, roster
   legality, player locks, FAAB resolution, trade execution, reproducible scoring, and standings.
-- `app/models` is the canonical state and audit schema. Internal player IDs remain authoritative;
+- `apps/api/app/models` is the canonical state and audit schema. Internal player IDs remain authoritative;
   external provider IDs are mappings.
-- `app/agents` gives every manager the same structured decision contract. The invocation service
+- `apps/api/app/agents` gives every manager the same structured decision contract. The invocation service
   applies concurrency-safe conservative cost reservations before provider dispatch and stores
   request metadata, parsed public decisions, latency, tokens, provider cost, and failures. Hidden
   chain-of-thought is neither requested nor required.
-- `app/nfl` isolates external player, schedule, injury, and statistics sources behind adapters.
-- `app/jobs` turns durable state into resumable work: draft recovery, kickoff-aware lineup passes,
+- `apps/api/app/nfl` isolates external player, schedule, injury, and statistics sources behind adapters.
+- `apps/api/app/jobs` turns durable state into resumable work: draft recovery, kickoff-aware lineup passes,
   concurrent waiver collection/processing, post-waiver free agency, trade review/expiry, NFL
   synchronization, live scoring, matchup completion, and week/playoff advancement. Renewable job
   leases, bounded retries, and fencing prevent stale workers from committing outcomes.

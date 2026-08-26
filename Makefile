@@ -1,24 +1,34 @@
-.PHONY: install lint test migrate run up down
+.PHONY: install install-api install-web lint test build migrate run-api run-web up down
 
-install:
-	python -m pip install -e ".[dev]"
+install: install-api install-web
+
+install-api:
+	python -m pip install -e "./apps/api[dev]"
+
+install-web:
+	npm install
 
 lint:
-	ruff check .
-	mypy app
+	cd apps/api && ruff check . && mypy app
+	npm run lint:web
 
 test:
-	pytest
+	cd apps/api && pytest
+
+build:
+	npm run build:web
 
 migrate:
-	alembic upgrade head
+	cd apps/api && alembic upgrade head
 
-run:
-	uvicorn app.main:app --reload
+run-api:
+	cd apps/api && uvicorn app.main:app --reload
+
+run-web:
+	npm run dev:web
 
 up:
 	docker compose up --build -d
 
 down:
 	docker compose down
-

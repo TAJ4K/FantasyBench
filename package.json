@@ -1,0 +1,18 @@
+{
+  "name": "fantasy-bench-monorepo",
+  "version": "0.2.0",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev:web",
+    "dev:web": "npm run dev --workspace @fantasy-bench/web",
+    "build": "npm run build:web",
+    "build:web": "npm run build --workspace @fantasy-bench/web",
+    "build:sites": "npm run build:sites --workspace @fantasy-bench/web",
+    "lint": "npm run lint:web",
+    "lint:web": "npm run lint --workspace @fantasy-bench/web",
+    "test:api": "python -m pytest apps/api/tests"
+  }
+}

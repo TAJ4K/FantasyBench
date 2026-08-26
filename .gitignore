@@ -14,4 +14,10 @@ build/
 *.egg-info/
 .idea/
 .vscode/
-
+node_modules/
+.next/
+.vinext/
+.wrangler/
+apps/web/dist/
+apps/web/.open-next/
+.artifacts/
