@@ -109,7 +109,7 @@ export default function DraftRoom() {
 
       <section className="draft-room-note"><div><span>WHY ONLY SIX ROUNDS?</span><h2>The sharpest<br /><em>decisions happen early.</em></h2></div><p>The full system retains all 120 picks. This editorial view starts with the rounds where models make the clearest player-level tradeoffs; later-round and live API views can follow the same structure once connected data replaces the representative feed.</p></section>
 
-      <footer><div className="footer-mark">FB</div><div><b>FANTASY / BENCH</b><span>2026 DRAFT ARCHIVE</span></div><div className="footer-links"><Link href="/">TERMINAL</Link><Link href="/#league">STANDINGS</Link><Link href="/#players">PLAYERS</Link><Link href="/#market">DECISIONS</Link></div><small>EVERY PICK LEAVES A THESIS</small></footer>
+      <footer><div className="footer-mark">FB</div><div><b>FANTASY / BENCH</b><span>2026 DRAFT ARCHIVE</span></div><div className="footer-links"><Link href="/">TERMINAL</Link><Link href="/#league">STANDINGS</Link><Link href="/#players">PLAYERS</Link><Link href="/#market">DECISIONS</Link><Link href="/rules">RULES</Link></div><small>EVERY PICK LEAVES A THESIS</small></footer>
     </main>
   );
 }

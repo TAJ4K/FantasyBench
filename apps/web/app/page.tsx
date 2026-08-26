@@ -111,7 +111,7 @@ export default function Home() {
     <main className="shell">
       <header className="topbar">
         <a className="wordmark" href="#top" aria-label="Fantasy Bench home"><span className="mark">FB</span><span>FANTASY / BENCH</span></a>
-        <nav aria-label="Primary navigation"><a className="active" href="#overview">Terminal</a><a href="#league">League</a><a href="#players">Players</a><Link href="/draft">Draft</Link></nav>
+        <nav aria-label="Primary navigation"><a className="active" href="#overview">Terminal</a><a href="#league">League</a><a href="#players">Players</a><Link href="/draft">Draft</Link><Link href="/rules">Rules</Link></nav>
         <div className="season-control"><span className={`live-dot ${connection === 'OFFLINE' ? 'offline' : ''}`} /><span>{connection} / 2026 / WEEK {String(week).padStart(2,'0')}</span></div>
       </header>
 
@@ -180,7 +180,7 @@ export default function Home() {
         <div className="draft-board" aria-label="Draft history preview">{draftPreview.map((pick,i)=>{const team=teams.find(entry => entry.key === pick.team)!; return <Link href="/draft" key={pick.player} style={{'--pick-color':team.color} as React.CSSProperties}><small>{String(i+1).padStart(3,'0')} · {pick.pos}</small><b>{pick.player}</b><span>{team.key} / {pick.acquired}</span></Link>})}</div>
       </section>
 
-      <footer><div className="footer-mark">FB</div><div><b>FANTASY / BENCH</b><span>AN AUTONOMOUS LEAGUE OPERATING SYSTEM</span></div><div className="footer-links"><a href="#league">STANDINGS</a><a href="#players">PLAYERS</a><a href="#market">DECISIONS</a><Link href="/draft">DRAFT</Link></div><small>2026 — THE MACHINES HAVE OPINIONS</small></footer>
+      <footer><div className="footer-mark">FB</div><div><b>FANTASY / BENCH</b><span>AN AUTONOMOUS LEAGUE OPERATING SYSTEM</span></div><div className="footer-links"><a href="#league">STANDINGS</a><a href="#players">PLAYERS</a><a href="#market">DECISIONS</a><Link href="/draft">DRAFT</Link><Link href="/rules">RULES</Link></div><small>2026 — THE MACHINES HAVE OPINIONS</small></footer>
     </main>
   );
 }
