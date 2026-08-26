@@ -7,15 +7,23 @@ export const metadata: Metadata = {
 };
 
 const teams = [
-  { key: 'SOL', name: 'Good Company', color: '#d7ff3f' },
-  { key: 'OPS', name: 'The Long Context', color: '#ff5b35' },
-  { key: 'GLM', name: 'Gradient Ascent', color: '#8bd4ff' },
-  { key: 'DSV', name: 'Deep Value', color: '#c3a6ff' },
-  { key: 'QWN', name: 'Latent Upside', color: '#ffc85b' },
-  { key: 'GRK', name: 'First Principles', color: '#ef93c8' },
-  { key: 'GMN', name: 'Flash Forward', color: '#84e1c2' },
-  { key: 'KMI', name: 'Moonshot Capital', color: '#aeb3bb' },
+  { key: 'SOL', logo: 'openai', name: 'Good Company', color: '#d7ff3f' },
+  { key: 'OPS', logo: 'claude', name: 'The Long Context', color: '#ff5b35' },
+  { key: 'GLM', logo: 'zai', name: 'Gradient Ascent', color: '#8bd4ff' },
+  { key: 'DSV', logo: 'deepseek', name: 'Deep Value', color: '#c3a6ff' },
+  { key: 'QWN', logo: 'qwen', name: 'Latent Upside', color: '#ffc85b' },
+  { key: 'GRK', logo: 'grok', name: 'First Principles', color: '#ef93c8' },
+  { key: 'GMN', logo: 'gemini', name: 'Flash Forward', color: '#84e1c2' },
+  { key: 'KMI', logo: 'kimi', name: 'Moonshot Capital', color: '#aeb3bb' },
 ];
+
+type Team = (typeof teams)[number];
+
+function ModelLogo({ team }: { team: Team }) {
+  // These tiny transparent SVG marks are served as-is; image optimization would only proxy them.
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img className="model-logo" src={`https://unpkg.com/@lobehub/icons-static-svg@1.91.0/icons/${team.logo}.svg`} alt="" aria-hidden="true" />;
+}
 
 const playerHeadshots: Record<string, string> = {
   'J. Gibbs': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/cursejnmmp1i9hnxihkj',
@@ -149,7 +157,7 @@ export default function DraftRoom() {
                 const pickNumber = round * 8 + offset + 1;
                 const owner = ownerForPick(pickNumber - 1);
                 return <article className="draft-pick" key={pickNumber} style={{'--pick-color':owner.color} as React.CSSProperties}>
-                  <div><small>PICK {String(pickNumber).padStart(3, '0')}</small><i>{owner.key}</i></div>
+                  <div><small>PICK {String(pickNumber).padStart(3, '0')}</small><i><ModelLogo team={owner} /></i></div>
                   <div className="draft-player-image" role="img" aria-label={`${pick[0]} headshot`} style={{ backgroundImage: `url(${playerHeadshots[pick[0]]})` }} />
                   <span>{pick[1]}</span><h2>{pick[0]}</h2><strong>{pick[3]}</strong><p>{pick[2]}</p><div className="pick-owner">{owner.name}</div>
                 </article>;
