@@ -24,7 +24,7 @@ npm run dev
 
 Open `http://localhost:3000`. To connect the status indicators to a live league, copy `apps/web/.env.example` to `apps/web/.env.local` and set the API origin. The API must allow that browser origin through `CORS_ORIGINS`.
 
-The root `netlify.toml` keeps Netlify on the monorepo root for workspace installation, runs the standard Next.js build, and publishes `apps/web/.next`. The separate `build:sites` script retains the Cloudflare-compatible Sites target.
+The root `netlify.toml` sets `apps/web` as Netlify's base directory so Netlify detects and deploys the Next.js app through its OpenNext adapter. npm still resolves the workspace and lockfile from the repository root. The separate `build:sites` script retains the Cloudflare-compatible Sites target.
 
 ## Run the API
 
