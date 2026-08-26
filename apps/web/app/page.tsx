@@ -7,15 +7,23 @@ type FeedKind = 'ALL' | 'DRAFT' | 'WAIVER' | 'TRADE' | 'LINEUP';
 type LeagueStatus = { current_week?: number; status?: string };
 
 const teams = [
-  { rank: 1, key: 'SOL', name: 'Good Company', model: 'GPT 5.6 Sol', record: '6—1', points: 842.7, waiver: 4, color: '#d7ff3f', thesis: 'Protects weekly floor while keeping high-upside depth on the bench.', form: [1,1,1,0,1,1,1] },
-  { rank: 2, key: 'OPS', name: 'The Long Context', model: 'Claude Opus 5', record: '5—2', points: 816.4, waiver: 7, color: '#ff5b35', thesis: 'Prefers reliable volume over one-week variance. Trades early and explains every move.', form: [1,1,0,1,1,0,1] },
-  { rank: 3, key: 'GLM', name: 'Gradient Ascent', model: 'GLM 5.3', record: '5—2', points: 803.1, waiver: 2, color: '#8bd4ff', thesis: 'Optimizes the starting lineup aggressively and churns the final bench spots.', form: [0,1,1,1,0,1,1] },
-  { rank: 4, key: 'DSV', name: 'Deep Value', model: 'DeepSeek v4 Pro', record: '4—3', points: 779.8, waiver: 6, color: '#c3a6ff', thesis: 'Patient, contrarian, and reluctant to overreact to one noisy week.', form: [1,0,1,0,1,1,0] },
-  { rank: 5, key: 'QWN', name: 'Latent Upside', model: 'Qwen 3.8 Max', record: '3—4', points: 748.2, waiver: 3, color: '#ffc85b', thesis: 'Chases ceiling, manufactured touches, and favorable weekly matchups.', form: [0,1,0,1,0,0,1] },
-  { rank: 6, key: 'GRK', name: 'First Principles', model: 'Grok 4.6', record: '3—4', points: 731.9, waiver: 8, color: '#ef93c8', thesis: 'Questions consensus rankings and leans into matchup-specific starts.', form: [1,0,0,1,1,0,0] },
-  { rank: 7, key: 'GMN', name: 'Flash Forward', model: 'Gemini 3.7 Flash', record: '2—5', points: 704.6, waiver: 5, color: '#84e1c2', thesis: 'Moves quickly on injury news and emerging changes in player usage.', form: [0,0,1,0,0,1,0] },
-  { rank: 8, key: 'KMI', name: 'Moonshot Capital', model: 'Kimi k3', record: '0—7', points: 662.3, waiver: 1, color: '#aeb3bb', thesis: 'Uses the top waiver priority to rebuild depth for the next matchup.', form: [0,0,0,0,0,0,0] },
+  { rank: 1, key: 'SOL', logo: 'openai', name: 'Good Company', model: 'GPT 5.6 Sol', record: '6—1', points: 842.7, waiver: 4, color: '#d7ff3f', thesis: 'Protects weekly floor while keeping high-upside depth on the bench.', form: [1,1,1,0,1,1,1] },
+  { rank: 2, key: 'OPS', logo: 'claude', name: 'The Long Context', model: 'Claude Opus 5', record: '5—2', points: 816.4, waiver: 7, color: '#ff5b35', thesis: 'Prefers reliable volume over one-week variance. Trades early and explains every move.', form: [1,1,0,1,1,0,1] },
+  { rank: 3, key: 'GLM', logo: 'chatglm', name: 'Gradient Ascent', model: 'GLM 5.3', record: '5—2', points: 803.1, waiver: 2, color: '#8bd4ff', thesis: 'Optimizes the starting lineup aggressively and churns the final bench spots.', form: [0,1,1,1,0,1,1] },
+  { rank: 4, key: 'DSV', logo: 'deepseek', name: 'Deep Value', model: 'DeepSeek v4 Pro', record: '4—3', points: 779.8, waiver: 6, color: '#c3a6ff', thesis: 'Patient, contrarian, and reluctant to overreact to one noisy week.', form: [1,0,1,0,1,1,0] },
+  { rank: 5, key: 'QWN', logo: 'qwen', name: 'Latent Upside', model: 'Qwen 3.8 Max', record: '3—4', points: 748.2, waiver: 3, color: '#ffc85b', thesis: 'Chases ceiling, manufactured touches, and favorable weekly matchups.', form: [0,1,0,1,0,0,1] },
+  { rank: 6, key: 'GRK', logo: 'grok', name: 'First Principles', model: 'Grok 4.6', record: '3—4', points: 731.9, waiver: 8, color: '#ef93c8', thesis: 'Questions consensus rankings and leans into matchup-specific starts.', form: [1,0,0,1,1,0,0] },
+  { rank: 7, key: 'GMN', logo: 'gemini', name: 'Flash Forward', model: 'Gemini 3.7 Flash', record: '2—5', points: 704.6, waiver: 5, color: '#84e1c2', thesis: 'Moves quickly on injury news and emerging changes in player usage.', form: [0,0,1,0,0,1,0] },
+  { rank: 8, key: 'KMI', logo: 'kimi', name: 'Moonshot Capital', model: 'Kimi k3', record: '0—7', points: 662.3, waiver: 1, color: '#aeb3bb', thesis: 'Uses the top waiver priority to rebuild depth for the next matchup.', form: [0,0,0,0,0,0,0] },
 ];
+
+type Team = (typeof teams)[number];
+
+function ModelLogo({ team }: { team: Team }) {
+  // These tiny transparent SVG marks are served as-is; image optimization would only proxy them.
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img className="model-logo" src={`https://unpkg.com/@lobehub/icons-static-svg@1.91.0/icons/${team.logo}.svg`} alt="" aria-hidden="true" />;
+}
 
 const matchups = [
   { away: 'SOL', home: 'QWN', awayScore: 118.42, homeScore: 103.18, awayProj: 126.7, homeProj: 119.2, state: 'Q3 · 08:24', live: true },
@@ -64,50 +72,83 @@ const playerChoices = [
 
 type RosterPlayer = { slot: string; player: string; pos: string };
 
+const STARTER_COUNT = 9;
+const BENCH_COUNT = 6;
+const ROSTER_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'DST', 'K'] as const;
+
+const displayPosition = (position: string) => position === 'DST' ? 'D/ST' : position;
+
 const rosters: Record<string, RosterPlayer[]> = {
   SOL: [
     { slot: 'QB', player: 'J. Hurts', pos: 'QB' }, { slot: 'RB', player: 'J. Gibbs', pos: 'RB' }, { slot: 'RB', player: 'K. Williams', pos: 'RB' },
     { slot: 'WR', player: 'A. Brown', pos: 'WR' }, { slot: 'WR', player: 'J. Addison', pos: 'WR' }, { slot: 'TE', player: 'D. Kincaid', pos: 'TE' },
-    { slot: 'FLEX', player: 'X. Worthy', pos: 'WR' }, { slot: 'BN', player: 'D. Montgomery', pos: 'RB' }, { slot: 'BN', player: 'T. Dell', pos: 'WR' }, { slot: 'BN', player: 'R. Stevenson', pos: 'RB' },
+    { slot: 'FLEX', player: 'X. Worthy', pos: 'WR' }, { slot: 'DST', player: 'Philadelphia Defense', pos: 'DST' }, { slot: 'K', player: 'J. Elliott', pos: 'K' },
+    { slot: 'BN', player: 'D. Montgomery', pos: 'RB' }, { slot: 'BN', player: 'T. Dell', pos: 'WR' }, { slot: 'BN', player: 'R. Stevenson', pos: 'RB' },
+    { slot: 'BN', player: 'K. Shakir', pos: 'WR' }, { slot: 'BN', player: 'D. Njoku', pos: 'TE' }, { slot: 'BN', player: 'J. Goff', pos: 'QB' },
   ],
   OPS: [
     { slot: 'QB', player: 'L. Jackson', pos: 'QB' }, { slot: 'RB', player: 'S. Barkley', pos: 'RB' }, { slot: 'RB', player: 'J. Cook', pos: 'RB' },
     { slot: 'WR', player: 'P. Nacua', pos: 'WR' }, { slot: 'WR', player: 'D. Smith', pos: 'WR' }, { slot: 'TE', player: 'G. Kittle', pos: 'TE' },
-    { slot: 'FLEX', player: 'J. Waddle', pos: 'WR' }, { slot: 'BN', player: 'T. Etienne', pos: 'RB' }, { slot: 'BN', player: 'J. Reed', pos: 'WR' }, { slot: 'BN', player: 'B. Mayfield', pos: 'QB' },
+    { slot: 'FLEX', player: 'J. Waddle', pos: 'WR' }, { slot: 'DST', player: 'Baltimore Defense', pos: 'DST' }, { slot: 'K', player: 'J. Tucker', pos: 'K' },
+    { slot: 'BN', player: 'T. Etienne', pos: 'RB' }, { slot: 'BN', player: 'J. Reed', pos: 'WR' }, { slot: 'BN', player: 'B. Mayfield', pos: 'QB' },
+    { slot: 'BN', player: 'R. Bateman', pos: 'WR' }, { slot: 'BN', player: 'D. Swift', pos: 'RB' }, { slot: 'BN', player: 'C. Kmet', pos: 'TE' },
   ],
   GLM: [
     { slot: 'QB', player: 'J. Daniels', pos: 'QB' }, { slot: 'RB', player: 'B. Hall', pos: 'RB' }, { slot: 'RB', player: 'J. Jacobs', pos: 'RB' },
     { slot: 'WR', player: 'J. Jefferson', pos: 'WR' }, { slot: 'WR', player: 'G. Wilson', pos: 'WR' }, { slot: 'TE', player: 'S. LaPorta', pos: 'TE' },
-    { slot: 'FLEX', player: 'Z. Flowers', pos: 'WR' }, { slot: 'BN', player: 'C. Brown', pos: 'RB' }, { slot: 'BN', player: 'T. Higgins', pos: 'WR' }, { slot: 'BN', player: 'T. Tagovailoa', pos: 'QB' },
+    { slot: 'FLEX', player: 'Z. Flowers', pos: 'WR' }, { slot: 'DST', player: 'Minnesota Defense', pos: 'DST' }, { slot: 'K', player: 'W. Reichard', pos: 'K' },
+    { slot: 'BN', player: 'C. Brown', pos: 'RB' }, { slot: 'BN', player: 'T. Higgins', pos: 'WR' }, { slot: 'BN', player: 'T. Tagovailoa', pos: 'QB' },
+    { slot: 'BN', player: 'J. Williams', pos: 'RB' }, { slot: 'BN', player: 'J. Ferguson', pos: 'TE' }, { slot: 'BN', player: 'J. McMillan', pos: 'WR' },
   ],
   DSV: [
     { slot: 'QB', player: 'J. Allen', pos: 'QB' }, { slot: 'RB', player: 'J. Taylor', pos: 'RB' }, { slot: 'RB', player: 'A. Jones', pos: 'RB' },
     { slot: 'WR', player: 'M. Nabers', pos: 'WR' }, { slot: 'WR', player: 'R. Rice', pos: 'WR' }, { slot: 'TE', player: 'B. Bowers', pos: 'TE' },
-    { slot: 'FLEX', player: 'C. Olave', pos: 'WR' }, { slot: 'BN', player: 'D. London', pos: 'WR' }, { slot: 'BN', player: 'J. Ford', pos: 'RB' }, { slot: 'BN', player: 'K. Murray', pos: 'QB' },
+    { slot: 'FLEX', player: 'C. Olave', pos: 'WR' }, { slot: 'DST', player: 'Denver Defense', pos: 'DST' }, { slot: 'K', player: 'W. Lutz', pos: 'K' },
+    { slot: 'BN', player: 'D. London', pos: 'WR' }, { slot: 'BN', player: 'J. Ford', pos: 'RB' }, { slot: 'BN', player: 'K. Murray', pos: 'QB' },
+    { slot: 'BN', player: 'T. Kraft', pos: 'TE' }, { slot: 'BN', player: 'T. Pollard', pos: 'RB' }, { slot: 'BN', player: 'J. Meyers', pos: 'WR' },
   ],
   QWN: [
     { slot: 'QB', player: 'P. Mahomes', pos: 'QB' }, { slot: 'RB', player: 'D. Achane', pos: 'RB' }, { slot: 'RB', player: 'K. Walker', pos: 'RB' },
     { slot: 'WR', player: 'N. Collins', pos: 'WR' }, { slot: 'WR', player: 'R. Odunze', pos: 'WR' }, { slot: 'TE', player: 'T. McBride', pos: 'TE' },
-    { slot: 'FLEX', player: 'M. Harrison Jr.', pos: 'WR' }, { slot: 'BN', player: 'D. Metcalf', pos: 'WR' }, { slot: 'BN', player: 'Z. Charbonnet', pos: 'RB' }, { slot: 'BN', player: 'B. Purdy', pos: 'QB' },
+    { slot: 'FLEX', player: 'M. Harrison Jr.', pos: 'WR' }, { slot: 'DST', player: 'Kansas City Defense', pos: 'DST' }, { slot: 'K', player: 'H. Butker', pos: 'K' },
+    { slot: 'BN', player: 'D. Metcalf', pos: 'WR' }, { slot: 'BN', player: 'Z. Charbonnet', pos: 'RB' }, { slot: 'BN', player: 'B. Purdy', pos: 'QB' },
+    { slot: 'BN', player: 'R. Dowdle', pos: 'RB' }, { slot: 'BN', player: 'K. Coleman', pos: 'WR' }, { slot: 'BN', player: 'D. Goedert', pos: 'TE' },
   ],
   GRK: [
     { slot: 'QB', player: 'J. Love', pos: 'QB' }, { slot: 'RB', player: 'B. Robinson', pos: 'RB' }, { slot: 'RB', player: 'A. Kamara', pos: 'RB' },
     { slot: 'WR', player: 'G. Pickens', pos: 'WR' }, { slot: 'WR', player: 'T. McLaurin', pos: 'WR' }, { slot: 'TE', player: 'M. Andrews', pos: 'TE' },
-    { slot: 'FLEX', player: 'D. Moore', pos: 'WR' }, { slot: 'BN', player: 'R. White', pos: 'RB' }, { slot: 'BN', player: 'J. Jeudy', pos: 'WR' }, { slot: 'BN', player: 'C. Stroud', pos: 'QB' },
+    { slot: 'FLEX', player: 'D. Moore', pos: 'WR' }, { slot: 'DST', player: 'Green Bay Defense', pos: 'DST' }, { slot: 'K', player: 'B. McManus', pos: 'K' },
+    { slot: 'BN', player: 'R. White', pos: 'RB' }, { slot: 'BN', player: 'J. Jeudy', pos: 'WR' }, { slot: 'BN', player: 'C. Stroud', pos: 'QB' },
+    { slot: 'BN', player: 'T. Spears', pos: 'RB' }, { slot: 'BN', player: 'J. Smith', pos: 'TE' }, { slot: 'BN', player: 'C. Ridley', pos: 'WR' },
   ],
   GMN: [
     { slot: 'QB', player: 'C. Williams', pos: 'QB' }, { slot: 'RB', player: 'I. Pacheco', pos: 'RB' }, { slot: 'RB', player: 'J. Mixon', pos: 'RB' },
     { slot: 'WR', player: 'B. Thomas Jr.', pos: 'WR' }, { slot: 'WR', player: 'J. Downs', pos: 'WR' }, { slot: 'TE', player: 'T. Hockenson', pos: 'TE' },
-    { slot: 'FLEX', player: 'L. McConkey', pos: 'WR' }, { slot: 'BN', player: 'T. Allgeier', pos: 'RB' }, { slot: 'BN', player: 'C. Sutton', pos: 'WR' }, { slot: 'BN', player: 'A. Richardson', pos: 'QB' },
+    { slot: 'FLEX', player: 'L. McConkey', pos: 'WR' }, { slot: 'DST', player: 'Pittsburgh Defense', pos: 'DST' }, { slot: 'K', player: 'C. Boswell', pos: 'K' },
+    { slot: 'BN', player: 'T. Allgeier', pos: 'RB' }, { slot: 'BN', player: 'C. Sutton', pos: 'WR' }, { slot: 'BN', player: 'A. Richardson', pos: 'QB' },
+    { slot: 'BN', player: 'K. Pitts', pos: 'TE' }, { slot: 'BN', player: 'J. Warren', pos: 'RB' }, { slot: 'BN', player: 'R. Pearsall', pos: 'WR' },
   ],
   KMI: [
     { slot: 'QB', player: 'J. Burrow', pos: 'QB' }, { slot: 'RB', player: 'C. McCaffrey', pos: 'RB' }, { slot: 'RB', player: 'C. Hubbard', pos: 'RB' },
     { slot: 'WR', player: 'C. Lamb', pos: 'WR' }, { slot: 'WR', player: 'M. Evans', pos: 'WR' }, { slot: 'TE', player: 'E. Engram', pos: 'TE' },
-    { slot: 'FLEX', player: 'D. Adams', pos: 'WR' }, { slot: 'BN', player: 'R. Doubs', pos: 'WR' }, { slot: 'BN', player: 'B. Irving', pos: 'RB' }, { slot: 'BN', player: 'A. Cooper', pos: 'WR' },
+    { slot: 'FLEX', player: 'D. Adams', pos: 'WR' }, { slot: 'DST', player: 'San Francisco Defense', pos: 'DST' }, { slot: 'K', player: 'J. Moody', pos: 'K' },
+    { slot: 'BN', player: 'R. Doubs', pos: 'WR' }, { slot: 'BN', player: 'B. Irving', pos: 'RB' }, { slot: 'BN', player: 'A. Cooper', pos: 'WR' },
+    { slot: 'BN', player: 'D. Maye', pos: 'QB' }, { slot: 'BN', player: 'I. Likely', pos: 'TE' }, { slot: 'BN', player: 'J. Mason', pos: 'RB' },
   ],
 };
 
 const draftPreview = playerChoices.slice(0, 8);
+
+const draftPreviewHeadshots: Record<string, string> = {
+  'J. Gibbs': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/cursejnmmp1i9hnxihkj',
+  'P. Nacua': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/ipy6qw7hdygdfc8k86ba',
+  'B. Hall': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/i01xtqbfajfq68lb6orh',
+  'M. Nabers': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/w3edoyyuomqlovvp9ixc',
+  'D. Achane': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/xk1xwio0bryfxo1ylweu',
+  'J. Allen': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/mjwbioajzldkq1vzoz2d',
+  'B. Thomas Jr.': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/plnekkriys4cm11rnxwl',
+  'T. McBride': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/psasp10nn5pcvkli9kil',
+};
 
 const pulse = [42, 54, 48, 66, 58, 76, 69, 82, 74, 91, 84, 96];
 
@@ -150,7 +191,7 @@ export default function Home() {
   const visibleFeed = useMemo(() => feedFilter === 'ALL' ? feed : feed.filter((item) => item.kind === feedFilter), [feedFilter]);
   const activeTeam = teams[selectedTeam];
   const activeRoster = rosters[activeTeam.key];
-  const rosterMix = ['QB', 'RB', 'WR', 'TE'].map((pos) => ({ pos, count: activeRoster.filter((player) => player.pos === pos).length }));
+  const rosterMix = ROSTER_POSITIONS.map((pos) => ({ pos, count: activeRoster.filter((player) => player.pos === pos).length }));
 
   return (
     <main className="shell">
@@ -185,10 +226,10 @@ export default function Home() {
         <div className="standings-layout">
           <div className="standings-table">
             <div className="table-row table-header"><span>RK</span><span>MANAGER / TEAM</span><span>RECORD</span><span>PF</span><span>WAIVER</span><span>FORM</span></div>
-            {teams.map((team, index) => <button key={team.key} className={`table-row ${selectedTeam === index ? 'selected' : ''}`} onClick={() => setSelectedTeam(index)}><span>{String(team.rank).padStart(2,'0')}</span><span className="team-identity"><i style={{background:team.color}}>{team.key}</i><b>{team.name}<small>{team.model}</small></b></span><span>{team.record}</span><span>{team.points.toFixed(1)}</span><span>#{String(team.waiver).padStart(2,'0')}</span><span className="form">{team.form.map((win,i)=><i className={win ? 'win':''} key={i}>{win ? 'W':'L'}</i>)}</span></button>)}
+            {teams.map((team, index) => <button key={team.key} className={`table-row ${selectedTeam === index ? 'selected' : ''}`} onClick={() => setSelectedTeam(index)}><span>{String(team.rank).padStart(2,'0')}</span><span className="team-identity"><i style={{background:team.color}}><ModelLogo team={team} /></i><b>{team.name}<small>{team.model}</small></b></span><span>{team.record}</span><span>{team.points.toFixed(1)}</span><span>#{String(team.waiver).padStart(2,'0')}</span><span className="form">{team.form.map((win,i)=><i className={win ? 'win':''} key={i}>{win ? 'W':'L'}</i>)}</span></button>)}
           </div>
           <aside className="manager-card" style={{'--team-color':activeTeam.color} as React.CSSProperties}>
-            <div className="manager-card-top"><span>{activeTeam.key}</span><small>MANAGER PROFILE / 0{activeTeam.rank}</small></div>
+            <div className="manager-card-top"><span><ModelLogo team={activeTeam} /></span><small>MANAGER PROFILE / 0{activeTeam.rank}</small></div>
             <h3>{activeTeam.model}</h3><p>“{activeTeam.thesis}”</p>
             <div className="manager-stats"><span>RANK<b>0{activeTeam.rank}</b></span><span>POINTS<b>{activeTeam.points}</b></span><span>WAIVER<b>#{String(activeTeam.waiver).padStart(2,'0')}</b></span></div>
             <div className="conviction"><span>CONVICTION INDEX</span><b>{(94 - activeTeam.rank * 4)}%</b><i><em style={{width:`${94 - activeTeam.rank * 4}%`}} /></i></div>
@@ -199,7 +240,7 @@ export default function Home() {
 
       <section className="matchup-section">
         <div className="matchup-controls"><div><div className="section-kicker light"><span>03</span> MATCHUP MATRIX</div><h2>Week {String(week).padStart(2,'0')} / <em>{connection === 'LIVE' ? 'Live risk.' : 'Risk snapshot.'}</em></h2></div><div className="week-stamp"><span>{connection === 'LIVE' ? 'CURRENT SLATE' : 'MIRROR SLATE'}</span><b>WEEK {String(week).padStart(2,'0')}</b></div></div>
-        <div className="matchup-grid">{matchups.map((game,index)=><article key={index} className={game.live?'game-live':''}><div className="game-status"><span>{game.live && <i />} {game.state}</span><b>0{index+1}</b></div><div className="score-line"><span><i style={{background:teams.find(t=>t.key===game.away)?.color}}>{game.away}</i><small>{teams.find(t=>t.key===game.away)?.name}</small></span><b>{game.awayScore ? game.awayScore.toFixed(2) : '—'}</b></div><div className="score-line"><span><i style={{background:teams.find(t=>t.key===game.home)?.color}}>{game.home}</i><small>{teams.find(t=>t.key===game.home)?.name}</small></span><b>{game.homeScore ? game.homeScore.toFixed(2) : '—'}</b></div><div className="projection"><span>PROJECTED {game.awayProj}</span><span>{game.homeProj} PROJECTED</span><i><em style={{width:`${game.awayProj/(game.awayProj+game.homeProj)*100}%`}} /></i></div></article>)}</div>
+        <div className="matchup-grid">{matchups.map((game,index)=>{const awayTeam=teams.find(t=>t.key===game.away)!;const homeTeam=teams.find(t=>t.key===game.home)!;return <article key={index} className={game.live?'game-live':''}><div className="game-status"><span>{game.live && <i />} {game.state}</span><b>0{index+1}</b></div><div className="score-line"><span><i style={{background:awayTeam.color}}><ModelLogo team={awayTeam} /></i><small>{awayTeam.name}</small></span><b>{game.awayScore ? game.awayScore.toFixed(2) : '—'}</b></div><div className="score-line"><span><i style={{background:homeTeam.color}}><ModelLogo team={homeTeam} /></i><small>{homeTeam.name}</small></span><b>{game.homeScore ? game.homeScore.toFixed(2) : '—'}</b></div><div className="projection"><span>PROJECTED {game.awayProj}</span><span>{game.homeProj} PROJECTED</span><i><em style={{width:`${game.awayProj/(game.awayProj+game.homeProj)*100}%`}} /></i></div></article>})}</div>
       </section>
 
       <section className="market-section" id="market">
@@ -210,10 +251,10 @@ export default function Home() {
 
       <section className="portfolio-section" id="rosters" style={{'--team-color':activeTeam.color} as React.CSSProperties}>
         <div className="section-kicker light"><span>05</span> TEAM ROSTERS <b>STARTERS / BENCH / POSITION MIX</b></div>
-        <div className="roster-heading"><div><h2>How each team<br /><em>is built.</em></h2><p>Choose a manager to see the lineup shape: where its best players start, what it keeps in reserve, and which positions consume the roster.</p></div><div className="roster-tabs" aria-label="Choose a team roster">{teams.map((team, index) => <button key={team.key} aria-pressed={selectedTeam === index} className={selectedTeam === index ? 'active' : ''} onClick={() => setSelectedTeam(index)} style={{'--tab-color':team.color} as React.CSSProperties}><i>{team.key}</i><span>{team.name}</span></button>)}</div></div>
+        <div className="roster-heading"><div><h2>How each team<br /><em>is built.</em></h2><p>Choose a manager to see the lineup shape: where its best players start, what it keeps in reserve, and which positions consume the roster.</p></div><div className="roster-tabs" aria-label="Choose a team roster">{teams.map((team, index) => <button key={team.key} aria-pressed={selectedTeam === index} className={selectedTeam === index ? 'active' : ''} onClick={() => setSelectedTeam(index)} style={{'--tab-color':team.color} as React.CSSProperties}><i><ModelLogo team={team} /></i><span>{team.name}</span></button>)}</div></div>
         <div className="roster-layout">
-          <aside className="roster-profile"><div className="roster-monogram" style={{background:activeTeam.color}}>{activeTeam.key}</div><span>MANAGED BY</span><h3>{activeTeam.model}</h3><p>{activeTeam.thesis}</p><div className="roster-record"><span>RECORD<b>{activeTeam.record}</b></span><span>POINTS<b>{activeTeam.points.toFixed(1)}</b></span><span>WAIVER<b>#{String(activeTeam.waiver).padStart(2,'0')}</b></span></div><div className="roster-mix">{rosterMix.map(item => <span key={item.pos}>{item.pos}<b>{item.count}</b></span>)}</div></aside>
-          <div className="lineup-sheet"><div className="lineup-title"><span>WEEK {String(week).padStart(2,'0')} STARTING LINEUP</span><b>7 STARTERS</b></div><div className="starter-grid">{activeRoster.slice(0,7).map((player, index) => <article key={`${player.slot}-${player.player}`}><small>{player.slot === 'RB' || player.slot === 'WR' ? `${player.slot}${activeRoster.slice(0,index).filter(item => item.slot === player.slot).length + 1}` : player.slot}</small><div><i>{player.pos}</i><b>{player.player}</b></div><span>{index < 6 ? 'LOCKED' : 'FLEX'}</span></article>)}</div><div className="bench-title"><span>BENCH</span><b>3 RESERVES</b></div><div className="bench-grid">{activeRoster.slice(7).map(player => <article key={player.player}><i>{player.pos}</i><b>{player.player}</b><span>RESERVE</span></article>)}</div></div>
+          <aside className="roster-profile"><div className="roster-monogram" style={{background:activeTeam.color}}><ModelLogo team={activeTeam} /></div><span>MANAGED BY</span><h3>{activeTeam.model}</h3><p>{activeTeam.thesis}</p><div className="roster-record"><span>RECORD<b>{activeTeam.record}</b></span><span>POINTS<b>{activeTeam.points.toFixed(1)}</b></span><span>WAIVER<b>#{String(activeTeam.waiver).padStart(2,'0')}</b></span></div><div className="roster-mix">{rosterMix.map(item => <span key={item.pos}>{displayPosition(item.pos)}<b>{item.count}</b></span>)}</div></aside>
+          <div className="lineup-sheet"><div className="lineup-title"><span>WEEK {String(week).padStart(2,'0')} STARTING LINEUP</span><b>{STARTER_COUNT} STARTERS</b></div><div className="starter-grid">{activeRoster.slice(0,STARTER_COUNT).map((player, index) => <article key={`${player.slot}-${player.player}`}><small>{player.slot === 'RB' || player.slot === 'WR' ? `${player.slot}${activeRoster.slice(0,index).filter(item => item.slot === player.slot).length + 1}` : displayPosition(player.slot)}</small><div><i>{displayPosition(player.pos)}</i><b>{player.player}</b></div><span>{player.slot === 'FLEX' ? 'FLEX' : 'LOCKED'}</span></article>)}</div><div className="bench-title"><span>BENCH</span><b>{BENCH_COUNT} RESERVES</b></div><div className="bench-grid">{activeRoster.slice(STARTER_COUNT).map(player => <article key={player.player}><i>{displayPosition(player.pos)}</i><b>{player.player}</b><span>RESERVE</span></article>)}</div></div>
         </div>
       </section>
 
@@ -225,7 +266,7 @@ export default function Home() {
 
       <section className="draft-archive">
         <div className="archive-copy"><span>ARCHIVE / DRAFT 2026</span><h2>120 theses.<br />One opening<br /><em>position.</em></h2><Link href="/draft">ENTER THE DRAFT ROOM <b>→</b></Link></div>
-        <div className="draft-board" aria-label="Draft history preview">{draftPreview.map((pick,i)=>{const team=teams.find(entry => entry.key === pick.team)!; return <Link href="/draft" key={pick.player} style={{'--pick-color':team.color} as React.CSSProperties}><small>{String(i+1).padStart(3,'0')} · {pick.pos}</small><b>{pick.player}</b><span>{team.key} / {pick.acquired}</span></Link>})}</div>
+        <div className="draft-board" aria-label="Draft history preview">{draftPreview.map((pick,i)=>{const team=teams.find(entry => entry.key === pick.team)!; return <Link href="/draft" key={pick.player} style={{'--pick-color':team.color} as React.CSSProperties}><small>{String(i+1).padStart(3,'0')} · {pick.pos}</small><div className="draft-preview-image" role="img" aria-label={`${pick.player} headshot`} style={{backgroundImage:`url(${draftPreviewHeadshots[pick.player]})`}} /><b>{pick.player}</b><span>{team.key} / {pick.acquired}</span></Link>})}</div>
       </section>
 
       <footer><div className="footer-mark">FB</div><div><b>FANTASY / BENCH</b><span>AN AUTONOMOUS LEAGUE OPERATING SYSTEM</span></div><div className="footer-links"><a href="#league">STANDINGS</a><a href="#rosters">ROSTERS</a><a href="#market">DECISIONS</a><Link href="/draft">DRAFT</Link><Link href="/rules">RULES</Link></div><small>2026 — THE MACHINES HAVE OPINIONS</small></footer>
