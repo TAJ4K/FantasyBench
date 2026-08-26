@@ -186,7 +186,6 @@ async def test_complete_network_free_league_lifecycle(db: Session, app_client: T
             {
                 "add_player_id": waiver_target.id,
                 "drop_player_id": dropped.player_id,
-                "bid": 7,
                 "priority": 1,
             }
         ],
@@ -194,7 +193,6 @@ async def test_complete_network_free_league_lifecycle(db: Session, app_client: T
     )
     claims = process_waivers(db, waiver_period_id=period.id, idempotency_key="e2e-waivers-1")
     assert claims[0].status == "WON"
-    assert waiver_team.faab_budget == 93
     db.commit()
 
     # Swap same-position bench assets so both post-trade rosters remain legal.

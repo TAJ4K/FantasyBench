@@ -132,8 +132,7 @@ def _make_team(
         model_identifier=manager.model,
         reasoning_config={"effort": manager.reasoning_effort} if manager.reasoning_effort else {},
         draft_position=position,
-        faab_budget=int(settings["faab_starting_budget"]),
-        waiver_priority=position,
+        waiver_priority=int(settings["teams"]) - position + 1,
     )
 
 

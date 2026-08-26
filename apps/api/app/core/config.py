@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     job_retry_base_seconds: float = Field(default=30.0, gt=0)
     lineup_review_hours_before_kickoff: str = "48,3"
     waiver_collection_hours_before_deadline: float = 2.0
-    waiver_period_hours: float = Field(default=24.0, gt=0)
+    waiver_period_hours: float = Field(default=48.0, gt=0)
     waiver_processing_grace_minutes: float = Field(default=30.0, ge=5)
     trade_review_interval_hours: float = Field(default=24.0, gt=0)
 

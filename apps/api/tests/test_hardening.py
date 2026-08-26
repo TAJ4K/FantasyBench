@@ -109,7 +109,7 @@ def test_pending_draft_identity_is_hidden_from_every_public_projection() -> None
         assert manager_memory(db, turn.team.id)["summary"]["valued_player_ids"] == [player.id]
 
 
-def test_pending_waiver_bids_are_private_until_processing() -> None:
+def test_pending_waiver_claims_are_private_until_processing() -> None:
     engine = _engine()
     with Session(engine, expire_on_commit=False) as db:
         league = initialize_league(db, nfl_season=2026, settings={"regular_season_weeks": 1})
@@ -127,7 +127,7 @@ def test_pending_waiver_bids_are_private_until_processing() -> None:
             db,
             waiver_period_id=period.id,
             team_id=team.id,
-            claims=[{"add_player_id": player.id, "bid": 37, "priority": 1}],
+            claims=[{"add_player_id": player.id, "priority": 1}],
         )
         run = LLMRun(
             league_id=league.id,
@@ -136,7 +136,7 @@ def test_pending_waiver_bids_are_private_until_processing() -> None:
             decision_type="WAIVER",
             prompt_version="waiver_test",
             request_payload={"metadata": {"context": {"waiver_period_id": period.id, "week": 1}}},
-            parsed_response={"public_reasoning": "Bid $37 on Waiver Secret."},
+            parsed_response={"public_reasoning": "Prioritize Waiver Secret."},
             success=True,
         )
         db.add(run)
@@ -144,7 +144,7 @@ def test_pending_waiver_bids_are_private_until_processing() -> None:
         ManagerMemoryService(db).record_decision(
             league.id,
             team.id,
-            f"Bid on {player.id}",
+            f"Claim {player.id}",
             valued_player_ids=[player.id],
             last_llm_run_id=run.id,
         )
@@ -153,7 +153,7 @@ def test_pending_waiver_bids_are_private_until_processing() -> None:
         assert manager_memory(db, team.id)["withheld"] is True
         process_waivers(db, waiver_period_id=period.id, idempotency_key="privacy")
         db.commit()
-        assert get_team_waivers(db, team.id)[0]["bid"] == 37
+        assert "bid" not in get_team_waivers(db, team.id)[0]
         assert get_team_decisions(db, team.id, limit=50, offset=0)[0]["id"] == run.id
 
 

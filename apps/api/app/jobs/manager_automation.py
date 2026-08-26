@@ -213,8 +213,8 @@ class ManagerAutomation:
             context = {
                 "waiver_period_id": period.id,
                 "week": period.week,
-                "faab_budget": team.faab_budget,
-                "default_bid": 1,
+                "waiver_priority": team.waiver_priority,
+                "waiver_rule": "CONTINUAL_ROLLING",
                 "available_players": [_context_player(player) for player in available],
                 "droppable_players": [_context_player(player) for _, player in roster],
             }
@@ -289,8 +289,6 @@ class ManagerAutomation:
             toolbox = LeagueToolbox(db, league_id, team_id)
             context = {
                 "week": week,
-                "faab_budget": team.faab_budget,
-                "default_bid": 0,
                 "available_players": toolbox.get_available_players(limit=100),
                 "droppable_players": toolbox.get_roster(),
                 "decision_mode": "instant_free_agency",

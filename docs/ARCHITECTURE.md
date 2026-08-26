@@ -24,7 +24,8 @@ NFL sync service -> fixtures, Sleeper metadata/injuries, nflverse schedule/stats
 - `apps/api/app/api` validates transport input, enforces commissioner authentication, calls services, and
   serializes responses. Business rules do not belong in controllers.
 - `apps/api/app/services` owns league rules and transaction boundaries: unique draft selections, roster
-  legality, player locks, FAAB resolution, trade execution, reproducible scoring, and standings.
+  legality, player locks, priority-waiver resolution, trade execution, reproducible scoring, and
+  standings.
 - `apps/api/app/models` is the canonical state and audit schema. Internal player IDs remain authoritative;
   external provider IDs are mappings.
 - `apps/api/app/agents` gives every manager the same structured decision contract. The invocation service
@@ -66,11 +67,13 @@ context snapshot, decision time, and reveal time. Decision completion is separat
 reveal, allowing a UI to animate without delaying the provider call. A restart derives the next
 action from persisted draft and pick state.
 
-Waivers process ordered conditional claims in deterministic waves. Higher FAAB wins; equal bids use
-rolling waiver priority. Managers begin concurrently before a submission cutoff; an independently
-persisted processing time provides a bounded grace period for already-started calls and records a
-timeout if work remains. Winning budgets and priority are updated with roster assignments and audit
-transactions in the same unit of work. A period-level idempotency key prevents double processing.
+Waivers process ordered conditional claims against a persistent continual rolling priority. There
+are no bids or budgets. Initial priority is reverse draft order. Each successful claimant moves to
+the bottom immediately, and standings never reset the list. Managers begin concurrently before a
+submission cutoff; an independently persisted processing time provides a bounded grace period for
+already-started calls and records a timeout if work remains. Roster assignments, the updated waiver
+order, and audit transactions commit in the same unit of work, and a period-level idempotency key
+prevents double processing.
 
 Trades validate current ownership, participants, status, expiry, negotiation round, and resulting
 roster sizes before moving every asset atomically. Each received asset creates an immutable audit

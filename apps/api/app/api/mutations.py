@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from datetime import timedelta
 from typing import Any
 
@@ -33,7 +32,6 @@ from app.nfl import NFLDataSyncService, NflverseProvider, SleeperProvider
 from app.schemas.api import (
     AddDropRequest,
     DropRequest,
-    FaabAdjustmentRequest,
     LeagueInitializeRequest,
     LineupSetRequest,
     StatsLoadRequest,
@@ -183,11 +181,28 @@ def set_lineup(
 
 
 @router.post("/free-agents/add", tags=["transactions"])
-@router.post("/admin/rosters/add-drop", tags=["admin"])
 def free_agent_add(
     payload: AddDropRequest, db: DbSession, _: AdminAccess, league_id: str | None = None
 ) -> dict[str, Any]:
     league = current_league(db, league_id)
+    return _add_drop(db, league, payload, bypass_waivers=False)
+
+
+@router.post("/admin/rosters/add-drop", tags=["admin"])
+def commissioner_add_drop(
+    payload: AddDropRequest, db: DbSession, _: AdminAccess, league_id: str | None = None
+) -> dict[str, Any]:
+    league = current_league(db, league_id)
+    return _add_drop(db, league, payload, bypass_waivers=True)
+
+
+def _add_drop(
+    db: DbSession,
+    league: League,
+    payload: AddDropRequest,
+    *,
+    bypass_waivers: bool,
+) -> dict[str, Any]:
     assignment, records = add_free_agent(
         db,
         league_id=league.id,
@@ -196,6 +211,7 @@ def free_agent_add(
         drop_player_id=payload.drop_player_id,
         week=league.current_week,
         idempotency_key=payload.idempotency_key,
+        bypass_waivers=bypass_waivers,
     )
     emit_event(
         db,
@@ -613,29 +629,6 @@ def advance_playoff_bracket(
     matchup = advance_playoffs(db, league_id=league.id)
     db.commit()
     return serialize(matchup)
-
-
-@router.post("/admin/teams/{team_id}/faab", tags=["admin"])
-def adjust_faab(
-    team_id: str, payload: FaabAdjustmentRequest, db: DbSession, _: AdminAccess
-) -> dict[str, Any]:
-    team = db.get(Team, team_id)
-    if not team:
-        raise NotFoundError("team", team_id)
-    ensure_league_unlocked(db, team.league_id)
-    if team.faab_budget + payload.amount < 0:
-        raise ConflictError("INVALID_FAAB_ADJUSTMENT", "FAAB budget cannot become negative.")
-    team.faab_budget += payload.amount
-    create_transaction(
-        db,
-        league_id=team.league_id,
-        team_id=team.id,
-        transaction_type="FAAB_ADJUSTMENT",
-        idempotency_key=f"faab:{team.id}:{uuid.uuid4()}",
-        details={"amount": payload.amount, "reason": payload.reason},
-    )
-    db.commit()
-    return serialize(team)
 
 
 @router.post("/admin/nfl/sync", tags=["admin", "nfl"])

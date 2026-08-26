@@ -56,7 +56,6 @@ class WaiverPeriodRequest(BaseModel):
 class WaiverClaimItem(BaseModel):
     add_player_id: str
     drop_player_id: str | None = None
-    bid: int = Field(ge=0)
     priority: int = Field(ge=1)
 
 
@@ -103,11 +102,6 @@ class StatsLoadRequest(BaseModel):
     week: int = Field(ge=1, le=30)
     provider: str = "fixture"
     stats: list[StatsLoadItem]
-
-
-class FaabAdjustmentRequest(BaseModel):
-    amount: int
-    reason: str = Field(min_length=1, max_length=500)
 
 
 class TriggerDecisionRequest(BaseModel):

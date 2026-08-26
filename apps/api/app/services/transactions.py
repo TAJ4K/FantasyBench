@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError
-from app.models.entities import League, Player, RosterAssignment, Team, Transaction
+from app.models.entities import League, Player, RosterAssignment, Team, Transaction, WaiverPeriod
 from app.services.guards import ensure_league_unlocked
 
 
@@ -80,6 +80,7 @@ def add_free_agent(
     idempotency_key: str,
     drop_player_id: str | None = None,
     week: int | None = None,
+    bypass_waivers: bool = False,
 ) -> tuple[RosterAssignment, list[Transaction]]:
     """Atomically add a free agent and optionally drop a rostered player.
 
@@ -115,6 +116,21 @@ def add_free_agent(
         return assignment, existing_records
 
     league = ensure_league_unlocked(db, league_id)
+    if not bypass_waivers:
+        open_period = db.scalar(
+            select(WaiverPeriod.id)
+            .where(
+                WaiverPeriod.league_id == league_id,
+                WaiverPeriod.week == league.current_week,
+                WaiverPeriod.status.in_(("OPEN", "PROCESSING")),
+            )
+            .limit(1)
+        )
+        if open_period is not None:
+            raise ConflictError(
+                "PLAYER_ON_WAIVERS",
+                "Players must be claimed through waivers until this week's waiver run clears.",
+            )
     team = db.scalar(
         select(Team).where(Team.id == team_id, Team.league_id == league_id).with_for_update()
     )

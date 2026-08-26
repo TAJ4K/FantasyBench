@@ -305,7 +305,7 @@ def standings(db: Session, *, league_id: str) -> list[dict[str, Any]]:
             "points_for": round(team.points_for, 4),
             "points_against": round(team.points_against, 4),
             "streak": team.streak,
-            "faab_remaining": team.faab_budget,
+            "waiver_priority": team.waiver_priority,
             "playoff_position": rank if rank <= playoff_count else None,
         }
         for rank, team in enumerate(teams, 1)

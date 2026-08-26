@@ -32,7 +32,7 @@ def ensure_waiver_period(db: Session, *, league: League, week: int) -> WaiverPer
     )
     if existing is not None:
         return existing
-    hours = float(league.settings.get("waiver_period_hours", 24))
+    hours = float(league.settings.get("waiver_period_hours", 48))
     period = WaiverPeriod(
         league_id=league.id,
         season=league.nfl_season,
@@ -81,21 +81,18 @@ def submit_claims(
     if team is None:
         raise NotFoundError("Team", team_id)
 
-    normalized: list[tuple[str, str | None, int, int]] = []
+    normalized: list[tuple[str, str | None, int]] = []
     for item in claims:
         payload = item if isinstance(item, dict) else item.model_dump()
         add_id = str(payload.get("add_player_id"))
         drop_id = payload.get("drop_player_id")
-        bid = int(payload.get("faab", payload.get("bid", 0)) or 0)
         priority = int(payload.get("priority", 0) or 0)
-        if bid < 0 or bid > team.faab_budget:
-            raise ConflictError("INVALID_FAAB_BID", "A FAAB bid must fit within the team's budget.")
         if priority < 1 or add_id == drop_id:
             raise ConflictError(
                 "INVALID_WAIVER_CLAIM", "Claim priority or player pairing is invalid."
             )
-        normalized.append((add_id, drop_id, bid, priority))
-    priorities = [row[3] for row in normalized]
+        normalized.append((add_id, drop_id, priority))
+    priorities = [row[2] for row in normalized]
     if len(priorities) != len(set(priorities)):
         raise ConflictError("DUPLICATE_CLAIM_PRIORITY", "Claim priorities must be unique.")
 
@@ -119,11 +116,10 @@ def submit_claims(
             team_id=team_id,
             add_player_id=add_id,
             drop_player_id=drop_id,
-            bid=bid,
             priority=priority,
             public_reasoning=public_reasoning,
         )
-        for add_id, drop_id, bid, priority in normalized
+        for add_id, drop_id, priority in normalized
     ]
     db.add_all(created)
     db.flush()
@@ -143,7 +139,7 @@ def process_waivers(
     idempotency_key: str,
     processed_at: datetime | None = None,
 ) -> list[WaiverClaim]:
-    """Resolve ordered conditional FAAB claims in deterministic waves."""
+    """Resolve ordered claims using the persistent continual rolling priority."""
     now = processed_at or utcnow()
     snapshot = db.get(WaiverPeriod, waiver_period_id)
     if snapshot is None:
@@ -208,7 +204,6 @@ def process_waivers(
     for claim in claims:
         pending[claim.team_id].append(claim)
 
-    winners_in_order: list[str] = []
     while any(pending.values()):
         heads: list[WaiverClaim] = []
         for team_id, queue in pending.items():
@@ -217,8 +212,6 @@ def process_waivers(
                 team = teams.get(team_id)
                 if team is None:
                     _invalidate(claim, "team not found", now)
-                elif claim.bid > team.faab_budget:
-                    _invalidate(claim, "insufficient FAAB", now)
                 elif claim.add_player_id in roster_by_player:
                     claim.status = "LOST"
                     claim.failure_reason = "player unavailable"
@@ -261,86 +254,78 @@ def process_waivers(
         if not heads:
             break
 
-        by_player: dict[str, list[WaiverClaim]] = defaultdict(list)
-        for claim in heads:
-            by_player[claim.add_player_id].append(claim)
-        for player_id in sorted(by_player):
-            contenders = by_player[player_id]
-            contenders.sort(
-                key=lambda claim: (
-                    -claim.bid,
-                    teams[claim.team_id].waiver_priority,
-                    claim.created_at,
-                    claim.id,
-                )
+        heads.sort(
+            key=lambda claim: (
+                teams[claim.team_id].waiver_priority,
+                claim.created_at,
+                claim.id,
             )
-            winner = contenders[0]
-            team = teams[winner.team_id]
-            dropped = None
-            replacement_slot = None
-            if winner.drop_player_id:
-                dropped = rosters[winner.team_id].pop(winner.drop_player_id)
-                if dropped.slot_type == "STARTER":
-                    replacement_slot = dropped.position_slot
-                roster_by_player.pop(winner.drop_player_id, None)
-                db.delete(dropped)
-                db.flush()
-                create_transaction(
-                    db,
-                    league_id=period.league_id,
-                    team_id=winner.team_id,
-                    player_id=winner.drop_player_id,
-                    transaction_type="WAIVER_DROP",
-                    week=period.week,
-                    idempotency_key=f"waiver:{period.id}:{winner.id}:drop",
-                    details={"claim_id": winner.id, "bid": winner.bid},
-                )
-            added = RosterAssignment(
-                league_id=period.league_id,
-                team_id=winner.team_id,
-                player_id=winner.add_player_id,
-                slot_type="STARTER" if replacement_slot else "BENCH",
-                position_slot=replacement_slot,
-                acquired_via="WAIVER_ADD",
-            )
-            db.add(added)
+        )
+        winner = heads[0]
+        team = teams[winner.team_id]
+        winning_priority = team.waiver_priority
+        dropped = None
+        replacement_slot = None
+        if winner.drop_player_id:
+            dropped = rosters[winner.team_id].pop(winner.drop_player_id)
+            if dropped.slot_type == "STARTER":
+                replacement_slot = dropped.position_slot
+            roster_by_player.pop(winner.drop_player_id, None)
+            db.delete(dropped)
             db.flush()
-            if replacement_slot:
-                roster_service.record_current_lineup(
-                    winner.team_id,
-                    week=period.week,
-                    source="WAIVER_ADD",
-                    public_reasoning=(
-                        f"Replaced {winner.drop_player_id} with "
-                        f"{winner.add_player_id} in {replacement_slot}."
-                    ),
-                )
-            roster_by_player[winner.add_player_id] = added
-            rosters[winner.team_id][winner.add_player_id] = added
-            team.faab_budget -= winner.bid
-            winner.status = "WON"
-            winner.processed_at = now
-            winners_in_order.append(winner.team_id)
             create_transaction(
                 db,
                 league_id=period.league_id,
                 team_id=winner.team_id,
-                player_id=winner.add_player_id,
-                transaction_type="WAIVER_ADD",
+                player_id=winner.drop_player_id,
+                transaction_type="WAIVER_DROP",
                 week=period.week,
-                idempotency_key=f"waiver:{period.id}:{winner.id}:add",
+                idempotency_key=f"waiver:{period.id}:{winner.id}:drop",
                 details={
                     "claim_id": winner.id,
-                    "bid": winner.bid,
-                    "dropped_player_id": winner.drop_player_id,
+                    "waiver_priority": winning_priority,
                 },
             )
-            pending[winner.team_id].pop(0)
-            for loser in contenders[1:]:
-                loser.status = "LOST"
-                loser.failure_reason = "outbid"
-                loser.processed_at = now
-                pending[loser.team_id].pop(0)
+        added = RosterAssignment(
+            league_id=period.league_id,
+            team_id=winner.team_id,
+            player_id=winner.add_player_id,
+            slot_type="STARTER" if replacement_slot else "BENCH",
+            position_slot=replacement_slot,
+            acquired_via="WAIVER_ADD",
+        )
+        db.add(added)
+        db.flush()
+        if replacement_slot:
+            roster_service.record_current_lineup(
+                winner.team_id,
+                week=period.week,
+                source="WAIVER_ADD",
+                public_reasoning=(
+                    f"Replaced {winner.drop_player_id} with "
+                    f"{winner.add_player_id} in {replacement_slot}."
+                ),
+            )
+        roster_by_player[winner.add_player_id] = added
+        rosters[winner.team_id][winner.add_player_id] = added
+        winner.status = "WON"
+        winner.processed_at = now
+        create_transaction(
+            db,
+            league_id=period.league_id,
+            team_id=winner.team_id,
+            player_id=winner.add_player_id,
+            transaction_type="WAIVER_ADD",
+            week=period.week,
+            idempotency_key=f"waiver:{period.id}:{winner.id}:add",
+            details={
+                "claim_id": winner.id,
+                "waiver_priority": winning_priority,
+                "dropped_player_id": winner.drop_player_id,
+            },
+        )
+        pending[winner.team_id].pop(0)
+        _move_team_to_bottom(teams, winner.team_id)
 
     for queue in pending.values():
         for claim in queue:
@@ -348,15 +333,6 @@ def process_waivers(
                 claim.status = "LOST"
                 claim.failure_reason = "conditional claim no longer executable"
                 claim.processed_at = now
-
-    # Rolling priority: each successful team moves behind teams that did not win,
-    # preserving prior priority order and first-win order.
-    ordered = sorted(teams.values(), key=lambda team: team.waiver_priority)
-    winner_ids = list(dict.fromkeys(winners_in_order))
-    reordered = [team for team in ordered if team.id not in winner_ids]
-    reordered.extend(teams[team_id] for team_id in winner_ids)
-    for priority, team in enumerate(reordered, 1):
-        team.waiver_priority = priority
 
     period.status = "PROCESSED"
     period.processed_at = now
@@ -368,3 +344,11 @@ def process_waivers(
             .order_by(WaiverClaim.team_id, WaiverClaim.priority)
         )
     )
+
+
+def _move_team_to_bottom(teams: dict[str, Team], winner_team_id: str) -> None:
+    winning_priority = teams[winner_team_id].waiver_priority
+    for team in teams.values():
+        if team.id != winner_team_id and team.waiver_priority > winning_priority:
+            team.waiver_priority -= 1
+    teams[winner_team_id].waiver_priority = len(teams)

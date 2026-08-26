@@ -54,6 +54,15 @@ curl -X POST http://127.0.0.1:8000/api/v1/admin/initialize \
 
 Initialization deliberately leaves the draft in `NOT_STARTED`. Only `POST /api/v1/draft/start` crosses the explicit start boundary.
 
+## Default league rules
+
+- Eight teams, head-to-head full PPR, and a 15-round snake draft.
+- Standard waiver claims with no bidding or acquisition budget.
+- Waiver priority starts in reverse draft order and then uses a continual rolling list.
+- Managers may rank conditional claims. After a successful claim, that team moves to the bottom of
+  the waiver order; standings never reset it.
+- Unclaimed players become first-come, first-served free agents after waivers process.
+
 ## Docker
 
 The root Compose stack builds the API from `apps/api` and runs it with PostgreSQL:

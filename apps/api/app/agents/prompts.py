@@ -34,7 +34,7 @@ def build_prompt(decision_type: str, context: dict[str, Any]) -> Prompt:
     version = DECISION_VERSIONS.get(kind, f"{kind}_v1")
     instructions = {
         "draft": "Select one available player while respecting the roster construction rules.",
-        "waiver": "Submit zero or more legal, ordered FAAB claims within the available budget.",
+        "waiver": "Submit zero or more legal waiver claims in preference order.",
         "lineup": (
             "Set a legal lineup from your roster. Preserve every locked_slots assignment exactly; "
             "choose among unlocked players only for the remaining slots."

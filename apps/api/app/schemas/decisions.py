@@ -19,7 +19,6 @@ class WaiverClaimDecision(BaseModel):
 
     add_player_id: str
     drop_player_id: str | None = None
-    faab: int = Field(ge=0)
     priority: int = Field(ge=1)
 
 

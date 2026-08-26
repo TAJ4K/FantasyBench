@@ -24,14 +24,12 @@ class DeterministicFakeProvider:
         elif "claims" in fields:
             available = _ordered(_legal_players(context.get("available_players", [])))
             roster = _ordered(context.get("droppable_players", []), reverse=True)
-            budget = int(context.get("faab_budget", 0))
             claims = []
             if available:
                 claims.append(
                     {
                         "add_player_id": _player_id(available[0]),
                         "drop_player_id": _player_id(roster[0]) if roster else None,
-                        "faab": min(budget, int(context.get("default_bid", 1))),
                         "priority": 1,
                     }
                 )
