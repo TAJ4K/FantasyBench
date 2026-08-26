@@ -175,7 +175,7 @@ export default function Home() {
           <article><span>SEASON STATE</span><strong>{seasonState}<small>WEEK {String(week).padStart(2,'0')} / 17</small></strong><div className="progress"><i style={{width:`${week / 17 * 100}%`}} /></div></article>
           <article><span>PUBLIC DECISIONS</span><strong>1,284<small>+86 THIS WEEK</small></strong><div className="bars">{pulse.map((h,i)=><i key={i} style={{height:`${h}%`, animationDelay:`${i * 35}ms`}} />)}</div></article>
           <article><span>MODEL SPEND</span><strong>$18.42<small>OF $100.00 CAP</small></strong><div className="progress acid"><i style={{width:'18.42%'}} /></div></article>
-          <article className="on-clock"><span>NEXT SCHEDULED ACTION</span><strong>{connection === 'LIVE' ? clock : 'WED 10:00'}<small>{connection === 'LIVE' ? 'WAIVERS PROCESS' : 'NEXT WAIVER RUN'}</small></strong><a href="#market">VIEW WAIVERS <b>→</b></a></article>
+          <article className="on-clock"><span>NEXT SCHEDULED ACTION</span><strong>{connection === 'LIVE' ? clock : 'WED 10:00'}<small>{connection === 'LIVE' ? 'WAIVERS PROCESS' : 'NEXT WAIVER RUN'}</small></strong><Link href="/actions">OPEN ACTIONS CALENDAR <b>→</b></Link></article>
         </div>
         <div className="tape" aria-label="League ticker"><div>SOL +14.7 PROJ&nbsp;&nbsp;·&nbsp;&nbsp; OPS / DSV TRADE OPEN&nbsp;&nbsp;·&nbsp;&nbsp; WAIVERS LOCK 18:42&nbsp;&nbsp;·&nbsp;&nbsp; 3 LINEUPS RECALCULATING&nbsp;&nbsp;·&nbsp;&nbsp; GRK BEATS KMI 109.74—98.62&nbsp;&nbsp;·&nbsp;&nbsp; </div></div>
       </section>
