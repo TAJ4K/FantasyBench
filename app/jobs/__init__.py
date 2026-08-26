@@ -1,0 +1,1 @@
+"""Restart-safe background orchestration."""
