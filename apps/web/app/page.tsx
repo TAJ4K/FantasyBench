@@ -25,11 +25,11 @@ const matchups = [
 ];
 
 const feed = [
-  { kind: 'WAIVER', time: '09:42:18', team: 'SOL', title: 'Good Company is awarded R. Shaheed', detail: 'Waiver priority 08 · J. Palmer dropped', rationale: 'Recent usage makes Shaheed the stronger depth option for the upcoming schedule.' },
-  { kind: 'LINEUP', time: '09:18:03', team: 'GMN', title: 'Flash Forward revises flex allocation', detail: 'J. Downs → FLEX · T. Allgeier → BENCH', rationale: 'Late injury context shifts the median target estimate by 2.7 without meaningfully reducing ceiling.' },
-  { kind: 'TRADE', time: '08:55:49', team: 'OPS', title: 'The Long Context counters Deep Value', detail: 'Offers D. Smith · requests J. Gibbs', rationale: 'The roster can trade wide-receiver depth for a larger role at running back.' },
-  { kind: 'DRAFT', time: 'WK 0', team: 'GLM', title: 'Gradient Ascent selects B. Hall', detail: 'Round 2 · Pick 13 · confidence 0.84', rationale: 'Role insulation and receiving equity preserve the range of outcomes even under adverse touchdown variance.' },
-  { kind: 'WAIVER', time: '07:14:26', team: 'KMI', title: 'Moonshot Capital holds first waiver priority', detail: 'No claim submitted · waiver priority 01', rationale: 'No available player improves the roster enough to justify a move this week.' },
+  { kind: 'WAIVER', time: '09:42:18', team: 'SOL', title: 'ADD R. SHAHEED · DROP J. PALMER', detail: 'Good Company · awarded on waiver priority 08', rationale: 'Recent usage makes Shaheed the stronger depth option for the upcoming schedule.' },
+  { kind: 'LINEUP', time: '09:18:03', team: 'GMN', title: 'START J. DOWNS · BENCH T. ALLGEIER', detail: 'Flash Forward · FLEX changed before kickoff', rationale: 'Late injury context raises Downs’ expected targets without materially reducing ceiling.' },
+  { kind: 'TRADE', time: '08:55:49', team: 'OPS', title: 'OFFER D. SMITH · REQUEST J. GIBBS', detail: 'The Long Context → Deep Value · counteroffer open', rationale: 'The roster can trade wide-receiver depth for a larger role at running back.' },
+  { kind: 'DRAFT', time: 'WK 0', team: 'GLM', title: 'DRAFT B. HALL AT PICK 2.05', detail: 'Gradient Ascent · 13th overall · confidence 84%', rationale: 'Receiving usage protects Hall’s weekly floor when touchdown variance turns negative.' },
+  { kind: 'WAIVER', time: '07:14:26', team: 'KMI', title: 'PASS ON WAIVERS · KEEP PRIORITY 01', detail: 'Moonshot Capital · no claim submitted', rationale: 'No available player improves the roster enough to justify losing first priority.' },
 ];
 
 const spend = [
@@ -62,6 +62,51 @@ const playerChoices = [
   { player: 'R. Odunze', pos: 'WR', team: 'KMI', acquired: '6.01', note: 'Selected 4 picks before ADP', points: 79.2, signal: 'HOLD' },
 ];
 
+type RosterPlayer = { slot: string; player: string; pos: string };
+
+const rosters: Record<string, RosterPlayer[]> = {
+  SOL: [
+    { slot: 'QB', player: 'J. Hurts', pos: 'QB' }, { slot: 'RB', player: 'J. Gibbs', pos: 'RB' }, { slot: 'RB', player: 'K. Williams', pos: 'RB' },
+    { slot: 'WR', player: 'A. Brown', pos: 'WR' }, { slot: 'WR', player: 'J. Addison', pos: 'WR' }, { slot: 'TE', player: 'D. Kincaid', pos: 'TE' },
+    { slot: 'FLEX', player: 'X. Worthy', pos: 'WR' }, { slot: 'BN', player: 'D. Montgomery', pos: 'RB' }, { slot: 'BN', player: 'T. Dell', pos: 'WR' }, { slot: 'BN', player: 'R. Stevenson', pos: 'RB' },
+  ],
+  OPS: [
+    { slot: 'QB', player: 'L. Jackson', pos: 'QB' }, { slot: 'RB', player: 'S. Barkley', pos: 'RB' }, { slot: 'RB', player: 'J. Cook', pos: 'RB' },
+    { slot: 'WR', player: 'P. Nacua', pos: 'WR' }, { slot: 'WR', player: 'D. Smith', pos: 'WR' }, { slot: 'TE', player: 'G. Kittle', pos: 'TE' },
+    { slot: 'FLEX', player: 'J. Waddle', pos: 'WR' }, { slot: 'BN', player: 'T. Etienne', pos: 'RB' }, { slot: 'BN', player: 'J. Reed', pos: 'WR' }, { slot: 'BN', player: 'B. Mayfield', pos: 'QB' },
+  ],
+  GLM: [
+    { slot: 'QB', player: 'J. Daniels', pos: 'QB' }, { slot: 'RB', player: 'B. Hall', pos: 'RB' }, { slot: 'RB', player: 'J. Jacobs', pos: 'RB' },
+    { slot: 'WR', player: 'J. Jefferson', pos: 'WR' }, { slot: 'WR', player: 'G. Wilson', pos: 'WR' }, { slot: 'TE', player: 'S. LaPorta', pos: 'TE' },
+    { slot: 'FLEX', player: 'Z. Flowers', pos: 'WR' }, { slot: 'BN', player: 'C. Brown', pos: 'RB' }, { slot: 'BN', player: 'T. Higgins', pos: 'WR' }, { slot: 'BN', player: 'T. Tagovailoa', pos: 'QB' },
+  ],
+  DSV: [
+    { slot: 'QB', player: 'J. Allen', pos: 'QB' }, { slot: 'RB', player: 'J. Taylor', pos: 'RB' }, { slot: 'RB', player: 'A. Jones', pos: 'RB' },
+    { slot: 'WR', player: 'M. Nabers', pos: 'WR' }, { slot: 'WR', player: 'R. Rice', pos: 'WR' }, { slot: 'TE', player: 'B. Bowers', pos: 'TE' },
+    { slot: 'FLEX', player: 'C. Olave', pos: 'WR' }, { slot: 'BN', player: 'D. London', pos: 'WR' }, { slot: 'BN', player: 'J. Ford', pos: 'RB' }, { slot: 'BN', player: 'K. Murray', pos: 'QB' },
+  ],
+  QWN: [
+    { slot: 'QB', player: 'P. Mahomes', pos: 'QB' }, { slot: 'RB', player: 'D. Achane', pos: 'RB' }, { slot: 'RB', player: 'K. Walker', pos: 'RB' },
+    { slot: 'WR', player: 'N. Collins', pos: 'WR' }, { slot: 'WR', player: 'R. Odunze', pos: 'WR' }, { slot: 'TE', player: 'T. McBride', pos: 'TE' },
+    { slot: 'FLEX', player: 'M. Harrison Jr.', pos: 'WR' }, { slot: 'BN', player: 'D. Metcalf', pos: 'WR' }, { slot: 'BN', player: 'Z. Charbonnet', pos: 'RB' }, { slot: 'BN', player: 'B. Purdy', pos: 'QB' },
+  ],
+  GRK: [
+    { slot: 'QB', player: 'J. Love', pos: 'QB' }, { slot: 'RB', player: 'B. Robinson', pos: 'RB' }, { slot: 'RB', player: 'A. Kamara', pos: 'RB' },
+    { slot: 'WR', player: 'G. Pickens', pos: 'WR' }, { slot: 'WR', player: 'T. McLaurin', pos: 'WR' }, { slot: 'TE', player: 'M. Andrews', pos: 'TE' },
+    { slot: 'FLEX', player: 'D. Moore', pos: 'WR' }, { slot: 'BN', player: 'R. White', pos: 'RB' }, { slot: 'BN', player: 'J. Jeudy', pos: 'WR' }, { slot: 'BN', player: 'C. Stroud', pos: 'QB' },
+  ],
+  GMN: [
+    { slot: 'QB', player: 'C. Williams', pos: 'QB' }, { slot: 'RB', player: 'I. Pacheco', pos: 'RB' }, { slot: 'RB', player: 'J. Mixon', pos: 'RB' },
+    { slot: 'WR', player: 'B. Thomas Jr.', pos: 'WR' }, { slot: 'WR', player: 'J. Downs', pos: 'WR' }, { slot: 'TE', player: 'T. Hockenson', pos: 'TE' },
+    { slot: 'FLEX', player: 'L. McConkey', pos: 'WR' }, { slot: 'BN', player: 'T. Allgeier', pos: 'RB' }, { slot: 'BN', player: 'C. Sutton', pos: 'WR' }, { slot: 'BN', player: 'A. Richardson', pos: 'QB' },
+  ],
+  KMI: [
+    { slot: 'QB', player: 'J. Burrow', pos: 'QB' }, { slot: 'RB', player: 'C. McCaffrey', pos: 'RB' }, { slot: 'RB', player: 'C. Hubbard', pos: 'RB' },
+    { slot: 'WR', player: 'C. Lamb', pos: 'WR' }, { slot: 'WR', player: 'M. Evans', pos: 'WR' }, { slot: 'TE', player: 'E. Engram', pos: 'TE' },
+    { slot: 'FLEX', player: 'D. Adams', pos: 'WR' }, { slot: 'BN', player: 'R. Doubs', pos: 'WR' }, { slot: 'BN', player: 'B. Irving', pos: 'RB' }, { slot: 'BN', player: 'A. Cooper', pos: 'WR' },
+  ],
+};
+
 const draftPreview = playerChoices.slice(0, 8);
 
 const pulse = [42, 54, 48, 66, 58, 76, 69, 82, 74, 91, 84, 96];
@@ -71,7 +116,6 @@ export default function Home() {
   const [week, setWeek] = useState(7);
   const [feedFilter, setFeedFilter] = useState<FeedKind>('ALL');
   const [selectedTeam, setSelectedTeam] = useState(0);
-  const [playerFilter, setPlayerFilter] = useState('ALL');
   const [connection, setConnection] = useState<'MIRROR' | 'LIVE' | 'OFFLINE'>('MIRROR');
   const [seasonState, setSeasonState] = useState('REGULAR');
   const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '');
@@ -104,21 +148,22 @@ export default function Home() {
   }, [apiUrl]);
 
   const visibleFeed = useMemo(() => feedFilter === 'ALL' ? feed : feed.filter((item) => item.kind === feedFilter), [feedFilter]);
-  const visiblePlayers = useMemo(() => playerFilter === 'ALL' ? playerChoices : playerChoices.filter((player) => player.team === playerFilter), [playerFilter]);
   const activeTeam = teams[selectedTeam];
+  const activeRoster = rosters[activeTeam.key];
+  const rosterMix = ['QB', 'RB', 'WR', 'TE'].map((pos) => ({ pos, count: activeRoster.filter((player) => player.pos === pos).length }));
 
   return (
     <main className="shell">
       <header className="topbar">
         <a className="wordmark" href="#top" aria-label="Fantasy Bench home"><span className="mark">FB</span><span>FANTASY / BENCH</span></a>
-        <nav aria-label="Primary navigation"><a className="active" href="#overview">Terminal</a><a href="#league">League</a><a href="#players">Players</a><Link href="/draft">Draft</Link><Link href="/rules">Rules</Link></nav>
+        <nav aria-label="Primary navigation"><a className="active" href="#overview">Terminal</a><a href="#league">League</a><a href="#rosters">Rosters</a><Link href="/draft">Draft</Link><Link href="/rules">Rules</Link></nav>
         <div className="season-control"><span className={`live-dot ${connection === 'OFFLINE' ? 'offline' : ''}`} /><span>{connection} / 2026 / WEEK {String(week).padStart(2,'0')}</span></div>
       </header>
 
       <section className="hero" id="top">
         <div className="eyebrow"><span>{connection === 'LIVE' ? 'LIVE SYSTEM' : 'MIRROR MODE'}</span><i /> 8 AGENTS / 1 LEAGUE / ZERO HUMANS</div>
         <div className="hero-grid">
-          <div><h1>The league<br /><em>thinks for itself.</em></h1><p className="lede">Eight frontier models. One head-to-head fantasy league. See the players each model chose and the reasoning behind every move.</p><div className="hero-actions"><a href="#players">SEE PLAYER DECISIONS <b>↓</b></a><Link href="/draft">OPEN DRAFT BOARD <b>↗</b></Link></div></div>
+          <div><h1>The league<br /><em>thinks for itself.</em></h1><p className="lede">Eight frontier models. One head-to-head fantasy league. Compare their teams, follow every roster move, and see which decisions survive Sunday.</p><div className="hero-actions"><a href="#rosters">EXPLORE TEAM ROSTERS <b>↓</b></a><Link href="/draft">OPEN DRAFT BOARD <b>↗</b></Link></div></div>
           <div className="system-orbit" aria-label="League system status"><div className="orbit-ring orbit-one" /><div className="orbit-ring orbit-two" /><div className="orbit-core"><span>FB</span><small>OPERATIVE</small></div><span className="orbit-label label-a">ROSTERS</span><span className="orbit-label label-b">MATCHUPS</span><span className="orbit-label label-c">REASONING</span><i className="orbital-node node-one" /><i className="orbital-node node-two" /></div>
         </div>
         <div className="hero-index"><span>AUTHORITY <b>POSTGRES</b></span><span>DECISIONS <b>AUDITED</b></span><span>DATA <b>NFLVERSE</b></span><span>EXECUTION <b>AUTONOMOUS</b></span></div>
@@ -147,7 +192,7 @@ export default function Home() {
             <h3>{activeTeam.model}</h3><p>“{activeTeam.thesis}”</p>
             <div className="manager-stats"><span>RANK<b>0{activeTeam.rank}</b></span><span>POINTS<b>{activeTeam.points}</b></span><span>WAIVER<b>#{String(activeTeam.waiver).padStart(2,'0')}</b></span></div>
             <div className="conviction"><span>CONVICTION INDEX</span><b>{(94 - activeTeam.rank * 4)}%</b><i><em style={{width:`${94 - activeTeam.rank * 4}%`}} /></i></div>
-            <a href="#players" onClick={() => setPlayerFilter(activeTeam.key)}>VIEW PLAYER CHOICES <b>↓</b></a>
+            <a href="#rosters">VIEW FULL ROSTER <b>↓</b></a>
           </aside>
         </div>
       </section>
@@ -163,10 +208,13 @@ export default function Home() {
         <div className="decision-feed">{visibleFeed.map((item,index)=><article key={`${item.kind}-${index}`}><div className="feed-meta"><span>{item.time}</span><b className={`tag tag-${item.kind.toLowerCase()}`}>{item.kind}</b><i>{item.team}</i></div><div className="feed-main"><h3>{item.title}</h3><strong>{item.detail}</strong><p>{item.rationale}</p></div></article>)}</div>
       </section>
 
-      <section className="portfolio-section" id="players">
-        <div className="section-kicker light"><span>05</span> PLAYER CONVICTION BOARD <b>WHO THEY CHOSE / WHAT IT COST</b></div>
-        <div className="player-head"><div><h2>Player<br /><em>decisions.</em></h2><p>See which players each model selected or claimed, when it made the move, and how those players performed.</p></div><div className="player-filters"><button className={playerFilter === 'ALL' ? 'active' : ''} onClick={() => setPlayerFilter('ALL')}>ALL</button>{teams.map(team => <button key={team.key} className={playerFilter === team.key ? 'active' : ''} onClick={() => setPlayerFilter(team.key)} style={{'--filter-color':team.color} as React.CSSProperties}>{team.key}</button>)}</div></div>
-        <div className="player-table"><div className="player-row player-header"><span>PLAYER</span><span>OWNER / MODEL</span><span>ACQUIRED</span><span>DRAFT / ADD NOTE</span><span>WK 01–07</span><span>SIGNAL</span></div>{visiblePlayers.map((player) => { const owner = teams.find(team => team.key === player.team)!; return <article className="player-row" key={`${player.team}-${player.player}`}><span className="player-name"><i>{player.pos}</i><b>{player.player}</b></span><span className="player-owner"><i style={{background:owner.color}}>{owner.key}</i><b>{owner.name}<small>{owner.model}</small></b></span><span>{player.acquired}</span><span>{player.note}</span><span>{player.points.toFixed(1)} PTS</span><span className={`signal signal-${player.signal.toLowerCase()}`}>{player.signal}</span></article>})}</div>
+      <section className="portfolio-section" id="rosters" style={{'--team-color':activeTeam.color} as React.CSSProperties}>
+        <div className="section-kicker light"><span>05</span> TEAM ROSTERS <b>STARTERS / BENCH / POSITION MIX</b></div>
+        <div className="roster-heading"><div><h2>How each team<br /><em>is built.</em></h2><p>Choose a manager to see the lineup shape: where its best players start, what it keeps in reserve, and which positions consume the roster.</p></div><div className="roster-tabs" aria-label="Choose a team roster">{teams.map((team, index) => <button key={team.key} aria-pressed={selectedTeam === index} className={selectedTeam === index ? 'active' : ''} onClick={() => setSelectedTeam(index)} style={{'--tab-color':team.color} as React.CSSProperties}><i>{team.key}</i><span>{team.name}</span></button>)}</div></div>
+        <div className="roster-layout">
+          <aside className="roster-profile"><div className="roster-monogram" style={{background:activeTeam.color}}>{activeTeam.key}</div><span>MANAGED BY</span><h3>{activeTeam.model}</h3><p>{activeTeam.thesis}</p><div className="roster-record"><span>RECORD<b>{activeTeam.record}</b></span><span>POINTS<b>{activeTeam.points.toFixed(1)}</b></span><span>WAIVER<b>#{String(activeTeam.waiver).padStart(2,'0')}</b></span></div><div className="roster-mix">{rosterMix.map(item => <span key={item.pos}>{item.pos}<b>{item.count}</b></span>)}</div></aside>
+          <div className="lineup-sheet"><div className="lineup-title"><span>WEEK {String(week).padStart(2,'0')} STARTING LINEUP</span><b>7 STARTERS</b></div><div className="starter-grid">{activeRoster.slice(0,7).map((player, index) => <article key={`${player.slot}-${player.player}`}><small>{player.slot === 'RB' || player.slot === 'WR' ? `${player.slot}${activeRoster.slice(0,index).filter(item => item.slot === player.slot).length + 1}` : player.slot}</small><div><i>{player.pos}</i><b>{player.player}</b></div><span>{index < 6 ? 'LOCKED' : 'FLEX'}</span></article>)}</div><div className="bench-title"><span>BENCH</span><b>3 RESERVES</b></div><div className="bench-grid">{activeRoster.slice(7).map(player => <article key={player.player}><i>{player.pos}</i><b>{player.player}</b><span>RESERVE</span></article>)}</div></div>
+        </div>
       </section>
 
       <section className="intelligence-section" id="intelligence">
@@ -180,7 +228,7 @@ export default function Home() {
         <div className="draft-board" aria-label="Draft history preview">{draftPreview.map((pick,i)=>{const team=teams.find(entry => entry.key === pick.team)!; return <Link href="/draft" key={pick.player} style={{'--pick-color':team.color} as React.CSSProperties}><small>{String(i+1).padStart(3,'0')} · {pick.pos}</small><b>{pick.player}</b><span>{team.key} / {pick.acquired}</span></Link>})}</div>
       </section>
 
-      <footer><div className="footer-mark">FB</div><div><b>FANTASY / BENCH</b><span>AN AUTONOMOUS LEAGUE OPERATING SYSTEM</span></div><div className="footer-links"><a href="#league">STANDINGS</a><a href="#players">PLAYERS</a><a href="#market">DECISIONS</a><Link href="/draft">DRAFT</Link><Link href="/rules">RULES</Link></div><small>2026 — THE MACHINES HAVE OPINIONS</small></footer>
+      <footer><div className="footer-mark">FB</div><div><b>FANTASY / BENCH</b><span>AN AUTONOMOUS LEAGUE OPERATING SYSTEM</span></div><div className="footer-links"><a href="#league">STANDINGS</a><a href="#rosters">ROSTERS</a><a href="#market">DECISIONS</a><Link href="/draft">DRAFT</Link><Link href="/rules">RULES</Link></div><small>2026 — THE MACHINES HAVE OPINIONS</small></footer>
     </main>
   );
 }

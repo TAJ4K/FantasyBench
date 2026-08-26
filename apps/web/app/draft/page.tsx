@@ -17,6 +17,57 @@ const teams = [
   { key: 'KMI', name: 'Moonshot Capital', color: '#aeb3bb' },
 ];
 
+const playerHeadshots: Record<string, string> = {
+  'J. Gibbs': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/cursejnmmp1i9hnxihkj',
+  'P. Nacua': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/ipy6qw7hdygdfc8k86ba',
+  'J. Jefferson': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/htjevkugzk6ietrjysny',
+  'M. Nabers': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/w3edoyyuomqlovvp9ixc',
+  'D. Achane': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/xk1xwio0bryfxo1ylweu',
+  'B. Robinson': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/esii5yb8yn9edboi4mlq',
+  'J. Chase': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/qya3dtjb5kgofcuj2tuw',
+  'C. Lamb': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/mbblzwtynxr15ovzkevi',
+  'A. St. Brown': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/fd8nwhm6pvxfyzphzl6i',
+  'B. Thomas Jr.': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/plnekkriys4cm11rnxwl',
+  'S. Barkley': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/qcayrzjpura2zydszonh',
+  'N. Collins': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/fguybjrn1kwflxm5szwq',
+  'B. Hall': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/i01xtqbfajfq68lb6orh',
+  'J. Allen': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/mjwbioajzldkq1vzoz2d',
+  'B. Bowers': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/waorceny0ggpaeckaol8',
+  'A. Brown': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/qfhvjyssf0lwsh0kienp',
+  'T. McBride': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/psasp10nn5pcvkli9kil',
+  'M. Harrison Jr.': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/hwpoo1icpnh8emjvqaii',
+  'L. Jackson': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/eno6s5qzl9grbfbfwhoa',
+  'G. Wilson': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/upxwxmhdd8xluztgqwhe',
+  'J. Taylor': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/yw46ky6akdm7h7siofu8',
+  'D. London': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/mcllowcfrmmdeo4zy3g1',
+  'J. Hurts': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/xow5yvxjeqa6witmofmp',
+  'K. Williams': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/xti3pek6rmojqchakxpy',
+  'D. Smith': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/k724kq3hyv7jc0y9s03x',
+  'G. Kittle': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/vkicdglglkyukgyxtmpx',
+  'J. Cook': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/anjbznqb9i21wzcgrtbs',
+  'T. Higgins': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/gpwtyv3viwy9q4ewderl',
+  'G. Pickens': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/cbpyykoguf7rsxezqzvk',
+  'J. Jacobs': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/uceokxeo0uqrqms3e3vl',
+  'R. Rice': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/qhkbqrydjeur8zvrrmfl',
+  'S. LaPorta': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/wxlk7ysg2nfq6h6ntdcu',
+  'X. Worthy': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/u6fmnffwteccoxn3uguq',
+  'Z. Flowers': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/xzhto2dejy2pflkfx40c',
+  'J. Daniels': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/gfz8k5onuqjrche9ogqc',
+  'C. Olave': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/onmxufsprtvglhejg94o',
+  'D. Montgomery': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/csz0c9roa4pqsccothxg',
+  'R. Odunze': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/niewdl2p2325kpohbw9v',
+  'J. Waddle': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/gkh7m1jedon9mwn5jlf1',
+  'D. Metcalf': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/kxql4sjfelubhxawu2zh',
+  'T. Etienne': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/pwko5dybmjie8qqo4qz2',
+  'J. Reed': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/uhb95fij1uo92ymqxpmg',
+  'D. Kincaid': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/z7k857flehljboaixj8m',
+  'C. Brown': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/tch3y6jlj7khvyi9jg0c',
+  'J. Downs': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/z3wahaxpmc6d5lcxgh60',
+  'K. Walker': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/vk6nruaqdewdglofcwwg',
+  'T. Dell': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/dzjep37g7fqdweqtncso',
+  'B. Mayfield': 'https://static.www.nfl.com/image/upload/f_auto,q_auto/league/gjb8e69jtt1ffqf1afue',
+};
+
 const picks = [
   ['J. Gibbs','RB','Ceiling and receiving equity separate him from the remaining backs.','ADP +3'],
   ['P. Nacua','WR','Target concentration is the cleanest source of weekly stability.','ADP ±0'],
@@ -99,6 +150,7 @@ export default function DraftRoom() {
                 const owner = ownerForPick(pickNumber - 1);
                 return <article className="draft-pick" key={pickNumber} style={{'--pick-color':owner.color} as React.CSSProperties}>
                   <div><small>PICK {String(pickNumber).padStart(3, '0')}</small><i>{owner.key}</i></div>
+                  <div className="draft-player-image" role="img" aria-label={`${pick[0]} headshot`} style={{ backgroundImage: `url(${playerHeadshots[pick[0]]})` }} />
                   <span>{pick[1]}</span><h2>{pick[0]}</h2><strong>{pick[3]}</strong><p>{pick[2]}</p><div className="pick-owner">{owner.name}</div>
                 </article>;
               })}
@@ -109,7 +161,7 @@ export default function DraftRoom() {
 
       <section className="draft-room-note"><div><span>WHY ONLY SIX ROUNDS?</span><h2>The sharpest<br /><em>decisions happen early.</em></h2></div><p>The full system retains all 120 picks. This editorial view starts with the rounds where models make the clearest player-level tradeoffs; later-round and live API views can follow the same structure once connected data replaces the representative feed.</p></section>
 
-      <footer><div className="footer-mark">FB</div><div><b>FANTASY / BENCH</b><span>2026 DRAFT ARCHIVE</span></div><div className="footer-links"><Link href="/">TERMINAL</Link><Link href="/#league">STANDINGS</Link><Link href="/#players">PLAYERS</Link><Link href="/#market">DECISIONS</Link><Link href="/rules">RULES</Link></div><small>EVERY PICK LEAVES A THESIS</small></footer>
+      <footer><div className="footer-mark">FB</div><div><b>FANTASY / BENCH</b><span>2026 DRAFT ARCHIVE</span></div><div className="footer-links"><Link href="/">TERMINAL</Link><Link href="/#league">STANDINGS</Link><Link href="/#rosters">ROSTERS</Link><Link href="/#market">DECISIONS</Link><Link href="/rules">RULES</Link></div><small>EVERY PICK LEAVES A THESIS</small></footer>
     </main>
   );
 }
