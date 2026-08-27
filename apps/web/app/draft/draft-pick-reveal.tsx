@@ -20,20 +20,58 @@ export default function DraftPickReveal({ children }: { children: ReactNode }) {
 
     board.classList.add('reveal-ready');
     const revealTimers: number[] = [];
+    const queuedRounds = new Set<HTMLElement>();
+    const visibleRounds = new Set<HTMLElement>();
+    const revealQueue: HTMLElement[] = [];
+    let revealing = false;
+    let stopped = false;
+
+    const revealNextRound = () => {
+      if (stopped || revealing) return;
+      let round = revealQueue.shift();
+      while (round && !visibleRounds.has(round)) {
+        queuedRounds.delete(round);
+        round = revealQueue.shift();
+      }
+      if (!round) return;
+
+      revealing = true;
+      observer.unobserve(round);
+      const roundPicks = Array.from(round.querySelectorAll<HTMLElement>('.draft-pick'));
+      const lastStep = Math.max(...roundPicks.map((pick) => Number(pick.style.getPropertyValue('--reveal-step')) || 0));
+
+      roundPicks.forEach((pick) => {
+        const step = Number(pick.style.getPropertyValue('--reveal-step')) || 0;
+        revealTimers.push(window.setTimeout(() => pick.classList.add('is-revealed'), step * 85));
+      });
+
+      revealTimers.push(window.setTimeout(() => {
+        revealing = false;
+        revealNextRound();
+      }, lastStep * 85 + 540));
+    };
 
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        entry.target.querySelectorAll<HTMLElement>('.draft-pick').forEach((pick) => {
-          const step = Number(pick.style.getPropertyValue('--reveal-step')) || 0;
-          revealTimers.push(window.setTimeout(() => pick.classList.add('is-revealed'), step * 85));
-        });
-        observer.unobserve(entry.target);
+        const round = entry.target as HTMLElement;
+        if (!entry.isIntersecting) {
+          visibleRounds.delete(round);
+          return;
+        }
+
+        visibleRounds.add(round);
+        if (!queuedRounds.has(round)) {
+          queuedRounds.add(round);
+          revealQueue.push(round);
+          revealQueue.sort((a, b) => rounds.indexOf(a) - rounds.indexOf(b));
+        }
       });
+      revealNextRound();
     }, { rootMargin: '0px 0px -10% 0px', threshold: 0.12 });
 
     rounds.forEach((round) => observer.observe(round));
     return () => {
+      stopped = true;
       observer.disconnect();
       revealTimers.forEach(window.clearTimeout);
     };
