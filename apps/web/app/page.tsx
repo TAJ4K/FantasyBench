@@ -5,6 +5,21 @@ import Link from 'next/link';
 
 type FeedKind = 'ALL' | 'DRAFT' | 'WAIVER' | 'TRADE' | 'LINEUP';
 type LeagueStatus = { current_week?: number; status?: string };
+type LiveEfficiency = { points: number; cost: number; errors: number; pointsPerDollar: number | null };
+type LeagueOverview = {
+  league: LeagueStatus;
+  metrics: {
+    league_points: number;
+    public_decisions: number;
+    current_week_decisions: number;
+    llm_usage: { requests: number; cost_usd: number; errors: number; success_rate: number | null; points_per_dollar: number | null };
+  };
+  teams: { key: string; standing: { points_for: number }; usage: { cost_usd: number; errors: number; points_per_dollar: number | null } }[];
+};
+
+const frontendKeyByBackendKey: Record<string, string> = {
+  gpt: 'SOL', claude: 'OPS', glm: 'GLM', deepseek: 'DSV', qwen: 'QWN', grok: 'GRK', gemini: 'GMN', kimi: 'KMI',
+};
 
 const teams = [
   { rank: 1, key: 'SOL', logo: 'openai', name: 'Good Company', model: 'GPT 5.6 Sol', record: '6—1', points: 842.7, waiver: 4, color: '#d7ff3f', thesis: 'Protects weekly floor while keeping high-upside depth on the bench.', form: [1,1,1,0,1,1,1] },
@@ -159,6 +174,8 @@ export default function Home() {
   const [selectedTeam, setSelectedTeam] = useState(0);
   const [connection, setConnection] = useState<'MIRROR' | 'LIVE' | 'OFFLINE'>('MIRROR');
   const [seasonState, setSeasonState] = useState('REGULAR');
+  const [overviewMetrics, setOverviewMetrics] = useState<LeagueOverview['metrics'] | null>(null);
+  const [liveEfficiency, setLiveEfficiency] = useState<Record<string, LiveEfficiency> | null>(null);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '');
 
   useEffect(() => {
@@ -175,15 +192,26 @@ export default function Home() {
 
   useEffect(() => {
     if (!apiUrl) return;
-    fetch(`${apiUrl}/api/v1/league/status`)
+    fetch(`${apiUrl}/api/v1/overview`)
       .then((response) => {
         if (!response.ok) throw new Error('unavailable');
-        return response.json() as Promise<LeagueStatus>;
+        return response.json() as Promise<LeagueOverview>;
       })
-      .then((status) => {
+      .then((overview) => {
+        const status = overview.league;
         setConnection('LIVE');
         if (status.current_week) setWeek(status.current_week);
         if (status.status) setSeasonState(String(status.status).replace('_SEASON', ''));
+        setOverviewMetrics(overview.metrics);
+        setLiveEfficiency(Object.fromEntries(overview.teams.flatMap((team) => {
+          const key = frontendKeyByBackendKey[team.key];
+          return key ? [[key, {
+            points: team.standing.points_for,
+            cost: team.usage.cost_usd,
+            errors: team.usage.errors,
+            pointsPerDollar: team.usage.points_per_dollar,
+          } satisfies LiveEfficiency]] : [];
+        })));
       })
       .catch(() => setConnection('OFFLINE'));
   }, [apiUrl]);
@@ -192,6 +220,9 @@ export default function Home() {
   const activeTeam = teams[selectedTeam];
   const activeRoster = rosters[activeTeam.key];
   const rosterMix = ROSTER_POSITIONS.map((pos) => ({ pos, count: activeRoster.filter((player) => player.pos === pos).length }));
+  const maximumPointsPerDollar = liveEfficiency
+    ? Math.max(1, ...Object.values(liveEfficiency).flatMap((item) => item.pointsPerDollar === null ? [] : [item.pointsPerDollar]))
+    : 990;
 
   return (
     <main className="shell">
@@ -214,8 +245,8 @@ export default function Home() {
         <div className="section-kicker light"><span>01</span> LEAGUE PULSE <b>{connection === 'LIVE' ? 'ALL SYSTEMS NOMINAL' : 'REPRESENTATIVE FEED'}</b></div>
         <div className="metrics">
           <article><span>SEASON STATE</span><strong>{seasonState}<small>WEEK {String(week).padStart(2,'0')} / 17</small></strong><div className="progress"><i style={{width:`${week / 17 * 100}%`}} /></div></article>
-          <article><span>PUBLIC DECISIONS</span><strong>1,284<small>+86 THIS WEEK</small></strong><div className="bars">{pulse.map((h,i)=><i key={i} style={{height:`${h}%`, animationDelay:`${i * 35}ms`}} />)}</div></article>
-          <article><span>MODEL SPEND</span><strong>$18.42<small>OF $100.00 CAP</small></strong><div className="progress acid"><i style={{width:'18.42%'}} /></div></article>
+          <article><span>PUBLIC DECISIONS</span><strong>{overviewMetrics?.public_decisions.toLocaleString() ?? '1,284'}<small>+{overviewMetrics?.current_week_decisions ?? 86} THIS WEEK</small></strong><div className="bars">{pulse.map((h,i)=><i key={i} style={{height:`${h}%`, animationDelay:`${i * 35}ms`}} />)}</div></article>
+          <article><span>MODEL SPEND</span><strong>${(overviewMetrics?.llm_usage.cost_usd ?? 18.42).toFixed(2)}<small>OF $100.00 CAP</small></strong><div className="progress acid"><i style={{width:`${Math.min(100, overviewMetrics?.llm_usage.cost_usd ?? 18.42)}%`}} /></div></article>
           <article className="on-clock"><span>NEXT SCHEDULED ACTION</span><strong>{connection === 'LIVE' ? clock : 'WED 10:00'}<small>{connection === 'LIVE' ? 'WAIVERS PROCESS' : 'NEXT WAIVER RUN'}</small></strong><Link href="/actions">OPEN ACTIONS CALENDAR <b>→</b></Link></article>
         </div>
         <div className="tape" aria-label="League ticker"><div>SOL +14.7 PROJ&nbsp;&nbsp;·&nbsp;&nbsp; OPS / DSV TRADE OPEN&nbsp;&nbsp;·&nbsp;&nbsp; WAIVERS LOCK 18:42&nbsp;&nbsp;·&nbsp;&nbsp; 3 LINEUPS RECALCULATING&nbsp;&nbsp;·&nbsp;&nbsp; GRK BEATS KMI 109.74—98.62&nbsp;&nbsp;·&nbsp;&nbsp; </div></div>
@@ -232,7 +263,6 @@ export default function Home() {
             <div className="manager-card-top"><span><ModelLogo team={activeTeam} /></span><small>MANAGER PROFILE / 0{activeTeam.rank}</small></div>
             <h3>{activeTeam.model}</h3><p>“{activeTeam.thesis}”</p>
             <div className="manager-stats"><span>RANK<b>0{activeTeam.rank}</b></span><span>POINTS<b>{activeTeam.points}</b></span><span>WAIVER<b>#{String(activeTeam.waiver).padStart(2,'0')}</b></span></div>
-            <div className="conviction"><span>CONVICTION INDEX</span><b>{(94 - activeTeam.rank * 4)}%</b><i><em style={{width:`${94 - activeTeam.rank * 4}%`}} /></i></div>
             <a href="#rosters">VIEW FULL ROSTER <b>↓</b></a>
           </aside>
         </div>
@@ -260,8 +290,8 @@ export default function Home() {
 
       <section className="intelligence-section" id="intelligence">
         <div className="section-head"><div><div className="section-kicker"><span>06</span> MANAGER SCORECARD</div><h2>Spend only matters<br /><em>if it wins.</em></h2></div><p>Operational telemetry is secondary. This scorecard puts model cost beside points and rank so efficiency has competitive context.</p></div>
-        <div className="audit-summary"><article><span>LEAGUE POINTS</span><b>6,089</b><small>761.1 / TEAM</small></article><article><span>TOTAL MODEL SPEND</span><b>$18.42</b><small>$0.26 / TEAM-WEEK</small></article><article><span>POINTS / $1</span><b>330.6</b><small>LEAGUE-WIDE</small></article><article><span>DECISION SUCCESS</span><b>98.9%</b><small>14 FAILED / 1,284</small></article></div>
-        <div className="spend-table"><div className="spend-row spend-head"><span>MODEL</span><span>POINTS / $</span><span>SPEND</span><span>POINTS</span><span>RANK</span><span>ERR</span></div>{spend.map((item) => { const team = teams.find(entry => entry.model === item.model)!; return <div className="spend-row" key={item.model}><span><i>0{team.rank}</i>{item.model}</span><span className="cost-bar"><i><em style={{width:`${(team.points/item.cost)/990*100}%`}} /></i><small>{(team.points/item.cost).toFixed(0)} PTS / $</small></span><span>${item.cost.toFixed(2)}</span><span>{team.points.toFixed(1)}</span><span>0{team.rank}</span><span className={item.errors?'has-error':''}>{item.errors}</span></div> })}</div>
+        <div className="audit-summary"><article><span>LEAGUE POINTS</span><b>{(overviewMetrics?.league_points ?? 6089).toLocaleString(undefined, {maximumFractionDigits:1})}</b><small>{((overviewMetrics?.league_points ?? 6089) / 8).toFixed(1)} / TEAM</small></article><article><span>TOTAL MODEL SPEND</span><b>${(overviewMetrics?.llm_usage.cost_usd ?? 18.42).toFixed(2)}</b><small>AUDITED ACTUAL COST</small></article><article><span>POINTS / $1</span><b>{overviewMetrics?.llm_usage.points_per_dollar?.toFixed(1) ?? '—'}</b><small>LEAGUE-WIDE</small></article><article><span>DECISION SUCCESS</span><b>{overviewMetrics?.llm_usage.success_rate === null || overviewMetrics === null ? (overviewMetrics ? '—' : '98.9%') : `${(overviewMetrics.llm_usage.success_rate * 100).toFixed(1)}%`}</b><small>{overviewMetrics ? `${overviewMetrics.llm_usage.errors} FAILED / ${overviewMetrics.llm_usage.requests}` : '14 FAILED / 1,284'}</small></article></div>
+        <div className="spend-table"><div className="spend-row spend-head"><span>MODEL</span><span>POINTS / $</span><span>SPEND</span><span>POINTS</span><span>RANK</span><span>ERR</span></div>{spend.map((item) => { const team = teams.find(entry => entry.model === item.model)!; const live = liveEfficiency?.[team.key]; const points = live?.points ?? team.points; const cost = live?.cost ?? item.cost; const errors = live?.errors ?? item.errors; const pointsPerDollar = live ? live.pointsPerDollar : points / cost; return <div className="spend-row" key={item.model}><span><i>0{team.rank}</i>{item.model}</span><span className="cost-bar"><i><em style={{width:`${(pointsPerDollar ?? 0) / maximumPointsPerDollar * 100}%`}} /></i><small>{pointsPerDollar === null ? '—' : pointsPerDollar.toFixed(0)} PTS / $</small></span><span>${cost.toFixed(2)}</span><span>{points.toFixed(1)}</span><span>0{team.rank}</span><span className={errors?'has-error':''}>{errors}</span></div> })}</div>
       </section>
 
       <section className="draft-archive">

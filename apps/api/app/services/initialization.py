@@ -127,7 +127,7 @@ def _make_team(
     return Team(
         league_id=league_id,
         key=manager.key,
-        name=manager.display_name,
+        name=manager.team_name,
         model_display_name=manager.display_name,
         model_identifier=manager.model,
         reasoning_config={"effort": manager.reasoning_effort} if manager.reasoning_effort else {},

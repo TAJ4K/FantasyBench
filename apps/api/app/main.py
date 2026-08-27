@@ -12,6 +12,7 @@ from app.api.draft_api import router as draft_router
 from app.api.errors import install_error_handlers
 from app.api.health import router as health_router
 from app.api.mutations import router as mutation_router
+from app.api.overview import router as overview_router
 from app.api.read_api import router as read_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
@@ -79,5 +80,6 @@ if settings.allowed_origins:
 
 app.include_router(health_router)
 app.include_router(read_router)
+app.include_router(overview_router)
 app.include_router(draft_router)
 app.include_router(mutation_router)

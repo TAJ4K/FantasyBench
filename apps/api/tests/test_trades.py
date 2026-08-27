@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
+from app.api.read_api import get_trade
 from app.core.errors import ConflictError
 from app.models.base import Base
 from app.models.entities import NflGame, Player, RosterAssignment, Transaction
@@ -47,6 +48,11 @@ def test_counter_and_atomic_trade_execution() -> None:
             receive_player_ids=[players[0].id, players[1].id],
         )
         accept_trade(db, offer_id=counter.id, accepting_team_id=first.id)
+        detail = get_trade(db, thread.id)
+        assert len(detail["offers"]) == 2
+        assert {
+            asset["player"]["full_name"] for asset in detail["offers"][1]["assets"]
+        } == {"Player 0", "Player 1", "Player 2", "Player 3"}
         owners = dict(
             db.execute(select(RosterAssignment.player_id, RosterAssignment.team_id)).all()
         )

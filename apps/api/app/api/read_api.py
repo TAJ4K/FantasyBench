@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession
@@ -30,6 +30,7 @@ from app.models.entities import (
     PlayerWeekStat,
     RosterAssignment,
     Team,
+    TradeAsset,
     TradeOffer,
     TradeThread,
     Transaction,
@@ -161,7 +162,14 @@ def get_team_roster(db: DbSession, team_id: str) -> list[dict[str, Any]]:
             RosterAssignment.player_id.not_in(_pending_draft_players(team.league_id)),
         )
         .options(selectinload(RosterAssignment.player))
-        .order_by(RosterAssignment.slot_type, RosterAssignment.position_slot)
+        .order_by(
+            case(
+                (RosterAssignment.slot_type == "STARTER", 0),
+                (RosterAssignment.slot_type == "BENCH", 1),
+                else_=2,
+            ),
+            RosterAssignment.position_slot,
+        )
     ).all()
     return [serialize(item) | {"player": serialize(item.player)} for item in assignments]
 
@@ -754,4 +762,31 @@ def get_trade(db: DbSession, trade_id: str) -> dict[str, Any]:
     offers = db.scalars(
         select(TradeOffer).where(TradeOffer.thread_id == trade_id).order_by(TradeOffer.sequence)
     ).all()
-    return serialize(thread) | {"offers": serialize(offers)}
+    offer_ids = [offer.id for offer in offers]
+    assets = list(
+        db.scalars(
+            select(TradeAsset)
+            .where(TradeAsset.offer_id.in_(offer_ids))
+            .order_by(TradeAsset.offer_id, TradeAsset.id)
+        )
+    ) if offer_ids else []
+    player_ids = {asset.player_id for asset in assets if asset.player_id}
+    players = (
+        {
+            player.id: player
+            for player in db.scalars(select(Player).where(Player.id.in_(player_ids)))
+        }
+        if player_ids
+        else {}
+    )
+    assets_by_offer: dict[str, list[dict[str, Any]]] = {offer_id: [] for offer_id in offer_ids}
+    for asset in assets:
+        player = players.get(asset.player_id) if asset.player_id else None
+        assets_by_offer[asset.offer_id].append(
+            serialize(asset) | {"player": serialize(player)}
+        )
+    return serialize(thread) | {
+        "offers": [
+            serialize(offer) | {"assets": assets_by_offer[offer.id]} for offer in offers
+        ]
+    }

@@ -41,7 +41,7 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-The API is available at `http://127.0.0.1:8000`, with Swagger at `/docs`. Public reads include league status, teams, rosters, players, the draft, transactions, trades, matchups, scores, standings, manager memory, events, and LLM usage.
+The API is available at `http://127.0.0.1:8000`, with Swagger at `/docs`. Public reads include league status, teams, rosters, players, the draft, transactions, trades, matchups, scores, standings, manager memory, events, and LLM usage. The spectator site can bootstrap from `/api/v1/overview`; `/api/v1/league/actions` exposes actual upcoming waiver deadlines, player locks, and trade expirations.
 
 Initialize a deterministic, network-free development league from the repository root:
 

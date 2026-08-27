@@ -127,12 +127,6 @@ const picks = [
   ['B. Mayfield','QB','Stack access and passing volume beat replacement-level cost.','QB8'],
 ] as const;
 
-function ownerForPick(index: number) {
-  const round = Math.floor(index / 8);
-  const slot = index % 8;
-  return teams[round % 2 === 0 ? slot : 7 - slot];
-}
-
 export default function DraftRoom() {
   return (
     <main className="draft-room-shell">
@@ -149,22 +143,39 @@ export default function DraftRoom() {
       </section>
 
       <section className="draft-rounds" aria-label="2026 draft board, rounds one through six">
-        {Array.from({ length: 6 }, (_, round) => (
-          <div className="draft-round" key={round}>
-            <div className="round-label"><span>ROUND</span><b>{String(round + 1).padStart(2, '0')}</b><small>{round % 2 === 0 ? 'LEFT → RIGHT' : 'RIGHT → LEFT'}</small></div>
-            <div className="round-picks">
-              {picks.slice(round * 8, round * 8 + 8).map((pick, offset) => {
-                const pickNumber = round * 8 + offset + 1;
-                const owner = ownerForPick(pickNumber - 1);
-                return <article className="draft-pick" key={pickNumber} style={{'--pick-color':owner.color} as React.CSSProperties}>
-                  <div><small>PICK {String(pickNumber).padStart(3, '0')}</small><i><ModelLogo team={owner} /></i></div>
-                  <div className="draft-player-image" role="img" aria-label={`${pick[0]} headshot`} style={{ backgroundImage: `url(${playerHeadshots[pick[0]]})` }} />
-                  <span>{pick[1]}</span><h2>{pick[0]}</h2><strong>{pick[3]}</strong><p>{pick[2]}</p><div className="pick-owner">{owner.name}</div>
-                </article>;
-              })}
+        <div className="draft-board-grid">
+          <div className="team-columns" aria-label="Draft teams by column">
+            <div className="team-columns-label">DRAFT SLOT</div>
+            <div className="team-columns-list">
+              {teams.map((team, slot) => (
+                <div className="team-column" key={team.key} style={{'--pick-color':team.color} as React.CSSProperties}>
+                  <small>{String(slot + 1).padStart(2, '0')}</small>
+                  <i><ModelLogo team={team} /></i>
+                  <b>{team.name}</b>
+                </div>
+              ))}
             </div>
           </div>
-        ))}
+
+          {Array.from({ length: 6 }, (_, round) => (
+            <div className="draft-round" key={round}>
+              <div className="round-label"><span>ROUND</span><b>{String(round + 1).padStart(2, '0')}</b><small>{round % 2 === 0 ? 'LEFT → RIGHT' : 'RIGHT → LEFT'}</small></div>
+              <div className="round-picks">
+                {teams.map((owner, teamIndex) => {
+                  const offset = round % 2 === 0 ? teamIndex : 7 - teamIndex;
+                  const pickNumber = round * 8 + offset + 1;
+                  const pick = picks[pickNumber - 1];
+                  return <article className="draft-pick" key={pickNumber} style={{'--pick-color':owner.color} as React.CSSProperties}>
+                    <div><small>PICK {String(pickNumber).padStart(3, '0')}</small><i><ModelLogo team={owner} /></i></div>
+                    <div className="draft-player-image" role="img" aria-label={`${pick[0]} headshot`} style={{ backgroundImage: `url(${playerHeadshots[pick[0]]})` }} />
+                    <span>{pick[1]}</span><h2>{pick[0]}</h2><strong>{pick[3]}</strong><p>{pick[2]}</p><div className="pick-owner">{owner.name}</div>
+                  </article>;
+                })}
+                {round < 5 && <span className={`round-turn ${round % 2 === 0 ? 'round-turn-right' : 'round-turn-left'}`} aria-hidden="true">↓</span>}
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="draft-room-note"><div><span>WHY ONLY SIX ROUNDS?</span><h2>The sharpest<br /><em>decisions happen early.</em></h2></div><p>The full system retains all 120 picks. This editorial view starts with the rounds where models make the clearest player-level tradeoffs; later-round and live API views can follow the same structure once connected data replaces the representative feed.</p></section>

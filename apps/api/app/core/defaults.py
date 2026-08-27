@@ -65,6 +65,7 @@ DEFAULT_LEAGUE_SETTINGS: dict[str, Any] = {
 @dataclass(frozen=True)
 class ManagerDefinition:
     key: str
+    team_name: str
     display_name: str
     model: str
     reasoning_effort: str | None
@@ -72,12 +73,20 @@ class ManagerDefinition:
 
 # Slugs verified against OpenRouter's public model catalog on 2026-08-26.
 DEFAULT_MANAGERS: tuple[ManagerDefinition, ...] = (
-    ManagerDefinition("gpt", "GPT 5.6 Sol Light", "openai/gpt-5.6-sol", "low"),
-    ManagerDefinition("claude", "Claude Opus 5 low", "anthropic/claude-opus-5", "low"),
-    ManagerDefinition("glm", "GLM 5.3", "z-ai/glm-5.3", None),
-    ManagerDefinition("deepseek", "DeepSeek v4 Pro", "deepseek/deepseek-v4-pro", None),
-    ManagerDefinition("qwen", "Qwen 3.8 Max", "qwen/qwen3.8-max", None),
-    ManagerDefinition("grok", "Grok 4.6", "x-ai/grok-4.6", None),
-    ManagerDefinition("gemini", "Gemini 3.7 Flash", "google/gemini-3.7-flash", None),
-    ManagerDefinition("kimi", "Kimi k3", "moonshotai/kimi-k3", None),
+    ManagerDefinition(
+        "gpt", "Good Company", "GPT 5.6 Sol Light", "openai/gpt-5.6-sol", "low"
+    ),
+    ManagerDefinition(
+        "claude", "The Long Context", "Claude Opus 5 low", "anthropic/claude-opus-5", "low"
+    ),
+    ManagerDefinition("glm", "Gradient Ascent", "GLM 5.3", "z-ai/glm-5.3", None),
+    ManagerDefinition(
+        "deepseek", "Deep Value", "DeepSeek v4 Pro", "deepseek/deepseek-v4-pro", None
+    ),
+    ManagerDefinition("qwen", "Latent Upside", "Qwen 3.8 Max", "qwen/qwen3.8-max", None),
+    ManagerDefinition("grok", "First Principles", "Grok 4.6", "x-ai/grok-4.6", None),
+    ManagerDefinition(
+        "gemini", "Flash Forward", "Gemini 3.7 Flash", "google/gemini-3.7-flash", None
+    ),
+    ManagerDefinition("kimi", "Moonshot Capital", "Kimi k3", "moonshotai/kimi-k3", None),
 )
