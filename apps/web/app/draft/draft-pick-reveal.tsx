@@ -18,55 +18,60 @@ export default function DraftPickReveal({ children }: { children: ReactNode }) {
       return;
     }
 
-    board.classList.add('reveal-ready');
     const revealTimers: number[] = [];
-    const queuedRounds = new Set<HTMLElement>();
-    const visibleRounds = new Set<HTMLElement>();
-    const revealQueue: HTMLElement[] = [];
+    const roundStates = rounds.map(() => 'pending' as 'pending' | 'queued' | 'revealing' | 'revealed');
+    const revealQueue: number[] = [];
     let revealing = false;
     let stopped = false;
 
     const revealNextRound = () => {
       if (stopped || revealing) return;
-      let round = revealQueue.shift();
-      while (round && !visibleRounds.has(round)) {
-        queuedRounds.delete(round);
-        round = revealQueue.shift();
-      }
-      if (!round) return;
+      const roundIndex = revealQueue.shift();
+      if (roundIndex === undefined) return;
 
-      revealing = true;
-      observer.unobserve(round);
+      const round = rounds[roundIndex];
+      const roundRect = round.getBoundingClientRect();
+      const isVisible = roundRect.bottom > 0 && roundRect.top < window.innerHeight;
       const roundPicks = Array.from(round.querySelectorAll<HTMLElement>('.draft-pick'));
+
+      if (!isVisible) {
+        roundPicks.forEach((pick) => pick.classList.add('is-revealed'));
+        roundStates[roundIndex] = 'revealed';
+        revealTimers.push(window.setTimeout(revealNextRound, 0));
+        return;
+      }
+
+      roundStates[roundIndex] = 'revealing';
+      revealing = true;
       const lastStep = Math.max(...roundPicks.map((pick) => Number(pick.style.getPropertyValue('--reveal-step')) || 0));
 
       roundPicks.forEach((pick) => {
         const step = Number(pick.style.getPropertyValue('--reveal-step')) || 0;
-        revealTimers.push(window.setTimeout(() => pick.classList.add('is-revealed'), step * 85));
+        revealTimers.push(window.setTimeout(() => pick.classList.add('is-revealed'), step * 65));
       });
 
       revealTimers.push(window.setTimeout(() => {
+        roundStates[roundIndex] = 'revealed';
         revealing = false;
         revealNextRound();
-      }, lastStep * 85 + 540));
+      }, lastStep * 65 + 360));
+    };
+
+    const queueThroughRound = (targetIndex: number) => {
+      rounds.slice(0, targetIndex + 1).forEach((round, roundIndex) => {
+        if (roundStates[roundIndex] !== 'pending') return;
+        roundStates[roundIndex] = 'queued';
+        revealQueue.push(roundIndex);
+        observer.unobserve(round);
+      });
+      revealNextRound();
     };
 
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
-        const round = entry.target as HTMLElement;
-        if (!entry.isIntersecting) {
-          visibleRounds.delete(round);
-          return;
-        }
-
-        visibleRounds.add(round);
-        if (!queuedRounds.has(round)) {
-          queuedRounds.add(round);
-          revealQueue.push(round);
-          revealQueue.sort((a, b) => rounds.indexOf(a) - rounds.indexOf(b));
-        }
+        if (!entry.isIntersecting) return;
+        queueThroughRound(rounds.indexOf(entry.target as HTMLElement));
       });
-      revealNextRound();
     }, { rootMargin: '0px 0px -10% 0px', threshold: 0.12 });
 
     rounds.forEach((round) => observer.observe(round));
@@ -77,5 +82,5 @@ export default function DraftPickReveal({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return <div className="draft-board-grid" ref={boardRef}>{children}</div>;
+  return <div className="draft-board-grid reveal-ready" ref={boardRef}>{children}</div>;
 }
