@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+
 import pytest
 from sqlalchemy import create_engine, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.core.config import Settings
 from app.core.errors import ConflictError, DomainError
+from app.jobs.draft_runner import DraftRunner, runnable_draft_filter
 from app.models.base import Base
 from app.models.entities import Draft, DraftPick, Player, RosterAssignment, Team
 from app.models.enums import DraftPickState, DraftStatus
@@ -137,4 +142,51 @@ def test_randomized_order_updates_positions_and_reverse_waivers() -> None:
         assert [team.id for team in teams] == order
         assert [team.waiver_priority for team in teams] == list(range(8, 0, -1))
     finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("restart", [False, True])
+async def test_runner_reveals_final_pick_after_completion(restart: bool) -> None:
+    db, league_id, players = _database()
+    factory = sessionmaker(bind=db.get_bind(), expire_on_commit=False)
+    runner = DraftRunner(
+        factory,
+        SimpleNamespace(decide=None),  # type: ignore[arg-type]
+        Settings(app_env="test", llm_provider="fake"),
+    )
+    try:
+        service = DraftService(db)
+        service.start(league_id)
+        db.commit()
+        assert runner._claim_lease(league_id)
+        for index in range(16):
+            pick = service.make_pick(league_id, players[index].id, reveal_delay_seconds=30)
+            if index < 15:
+                service.reveal_pick(pick.id, force=True)
+        final_pick_id = pick.id
+        db.commit()
+        # Completion must not stop the worker before the configured reveal time.
+        delay = runner._prepare_iteration(league_id)
+        assert delay is not None and delay > 0
+        db.refresh(pick)
+        assert pick.state == "REVEAL_PENDING"
+        pick.reveal_at = datetime.now(UTC) - timedelta(seconds=1)
+        db.commit()
+        if restart:
+            runner._release_lease(league_id)
+            runner = DraftRunner(factory, runner.provider, runner.settings)
+            await runner.resume_active()
+            await runner._tasks[league_id]
+        else:
+            await runner.run(league_id)
+        db.expire_all()
+        assert db.get(DraftPick, final_pick_id).state == "REVEALED"
+        assert db.scalar(select(func.count(DraftPick.id)).where(
+            DraftPick.state == "REVEALED"
+        )) == 16
+        assert db.scalar(select(func.count(RosterAssignment.id))) == 16
+        assert db.scalar(select(Draft.id).where(runnable_draft_filter())) is None
+    finally:
+        await runner.stop()
         db.close()

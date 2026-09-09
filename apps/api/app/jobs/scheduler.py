@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.jobs.draft_runner import DraftRunner
+from app.jobs.draft_runner import DraftRunner, runnable_draft_filter
 from app.jobs.manager_automation import ManagerAutomation
 from app.models.base import utcnow
 from app.models.entities import (
@@ -22,7 +22,6 @@ from app.models.entities import (
     TradeThread,
     WaiverPeriod,
 )
-from app.models.enums import DraftStatus
 from app.nfl import NFLDataSyncService, NflverseProvider, SleeperProvider
 from app.services.competition import calculate_matchup, complete_matchup
 from app.services.events import emit_event
@@ -123,7 +122,7 @@ class LeagueScheduler:
                     select(Draft.league_id)
                     .join(League, League.id == Draft.league_id)
                     .where(
-                        Draft.status == DraftStatus.ACTIVE.value,
+                        runnable_draft_filter(),
                         League.locked.is_(False),
                     )
                 ):

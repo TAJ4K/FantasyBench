@@ -24,6 +24,16 @@ from app.services.draft import DraftService
 logger = logging.getLogger(__name__)
 
 
+def runnable_draft_filter() -> Any:
+    pending_reveal = select(DraftPick.id).where(
+        DraftPick.draft_id == Draft.id,
+        DraftPick.state == DraftPickState.REVEAL_PENDING.value,
+    ).exists()
+    return (Draft.status == DraftStatus.ACTIVE.value) | (
+        (Draft.status == DraftStatus.COMPLETED.value) & pending_reveal
+    )
+
+
 class DraftRunner:
     def __init__(
         self,
@@ -56,7 +66,7 @@ class DraftRunner:
     async def resume_active(self) -> None:
         with self.session_factory() as db:
             league_ids = list(
-                db.scalars(select(Draft.league_id).where(Draft.status == DraftStatus.ACTIVE.value))
+                db.scalars(select(Draft.league_id).where(runnable_draft_filter()))
             )
         for league_id in league_ids:
             self.start(league_id)
@@ -99,7 +109,9 @@ class DraftRunner:
         now = datetime.now(UTC)
         with self.session_factory() as db:
             draft = db.scalar(select(Draft).where(Draft.league_id == league_id).with_for_update())
-            if draft is None or draft.status != DraftStatus.ACTIVE.value:
+            if draft is None or draft.status not in {
+                DraftStatus.ACTIVE.value, DraftStatus.COMPLETED.value
+            }:
                 return False
             lease_expiry = draft.lease_expires_at
             if lease_expiry is not None and lease_expiry.tzinfo is None:
@@ -120,7 +132,7 @@ class DraftRunner:
             draft = db.scalar(select(Draft).where(Draft.league_id == league_id).with_for_update())
             if (
                 draft is None
-                or draft.status != DraftStatus.ACTIVE.value
+                or draft.status not in {DraftStatus.ACTIVE.value, DraftStatus.COMPLETED.value}
                 or draft.runner_id != self.runner_id
             ):
                 return False
