@@ -65,6 +65,8 @@ class LeagueToolbox:
                 "name": player.full_name,
                 "position": player.position,
                 "nfl_team": player.nfl_team,
+                "status": player.status,
+                "active": player.active,
                 "injury_status": player.injury_status,
                 "bye_week": player.bye_week,
                 "rank": (player.metadata_json or {}).get("rank", 10**9),
@@ -137,6 +139,8 @@ class LeagueToolbox:
         return {
             "player_id": player.id,
             "status": player.status,
+            "active": player.active,
+            "nfl_team": player.nfl_team,
             "injury_status": player.injury_status,
         }
 
@@ -313,6 +317,7 @@ class LeagueToolbox:
             "position": player.position,
             "nfl_team": player.nfl_team,
             "status": player.status,
+            "active": player.active,
             "injury_status": player.injury_status,
             "bye_week": player.bye_week,
             "rank": (player.metadata_json or {}).get("rank", 10**9),

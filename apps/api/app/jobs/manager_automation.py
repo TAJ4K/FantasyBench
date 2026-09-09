@@ -55,7 +55,9 @@ class ManagerAutomation:
         self.provider = provider
         self.settings = settings
 
-    async def set_all_lineups(self, league_id: str, week: int) -> dict[str, str]:
+    async def set_all_lineups(
+        self, league_id: str, week: int, *, admin_message: str | None = None
+    ) -> dict[str, str]:
         with self.session_factory() as db:
             ensure_league_unlocked(db, league_id)
             team_ids = list(
@@ -67,7 +69,7 @@ class ManagerAutomation:
         results: dict[str, str] = {}
         for team_id in team_ids:
             try:
-                await self._set_team_lineup(league_id, team_id, week)
+                await self._set_team_lineup(league_id, team_id, week, admin_message=admin_message)
                 results[team_id] = "COMPLETE"
             except Exception as exc:
                 results[team_id] = f"FAILED: {exc}"
@@ -77,7 +79,9 @@ class ManagerAutomation:
                 )
         return results
 
-    async def _set_team_lineup(self, league_id: str, team_id: str, week: int) -> None:
+    async def _set_team_lineup(
+        self, league_id: str, team_id: str, week: int, *, admin_message: str | None = None
+    ) -> None:
         with self.session_factory() as db:
             league = db.get(League, league_id)
             team = db.get(Team, team_id)
@@ -110,15 +114,21 @@ class ManagerAutomation:
                         "player_id": player.id,
                         "name": player.full_name,
                         "position": player.position,
+                        "nfl_team": player.nfl_team,
+                        "status": player.status,
+                        "active": player.active,
+                        "slot_type": assignment.slot_type,
                         "injury_status": player.injury_status,
                         "bye_week": player.bye_week,
                         "projection": (player.metadata_json or {}).get("projection"),
                         "rank": (player.metadata_json or {}).get("rank", 10**9),
                         "locked": roster_service.is_player_locked(league, player),
                     }
-                    for _, player in rows
+                    for assignment, player in rows
                 ],
             }
+            if admin_message:
+                context["admin_message"] = admin_message
             prompt = build_prompt("lineup", context)
             request = _request(
                 team,
@@ -707,6 +717,9 @@ def _context_player(player: Player) -> dict[str, Any]:
         "player_id": player.id,
         "name": player.full_name,
         "position": player.position,
+        "nfl_team": player.nfl_team,
+        "status": player.status,
+        "active": player.active,
         "rank": (player.metadata_json or {}).get("rank", 10**9),
         "projection": (player.metadata_json or {}).get("projection"),
         "injury_status": player.injury_status,

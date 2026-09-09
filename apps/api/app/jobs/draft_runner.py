@@ -25,10 +25,14 @@ logger = logging.getLogger(__name__)
 
 
 def runnable_draft_filter() -> Any:
-    pending_reveal = select(DraftPick.id).where(
-        DraftPick.draft_id == Draft.id,
-        DraftPick.state == DraftPickState.REVEAL_PENDING.value,
-    ).exists()
+    pending_reveal = (
+        select(DraftPick.id)
+        .where(
+            DraftPick.draft_id == Draft.id,
+            DraftPick.state == DraftPickState.REVEAL_PENDING.value,
+        )
+        .exists()
+    )
     return (Draft.status == DraftStatus.ACTIVE.value) | (
         (Draft.status == DraftStatus.COMPLETED.value) & pending_reveal
     )
@@ -65,9 +69,7 @@ class DraftRunner:
 
     async def resume_active(self) -> None:
         with self.session_factory() as db:
-            league_ids = list(
-                db.scalars(select(Draft.league_id).where(runnable_draft_filter()))
-            )
+            league_ids = list(db.scalars(select(Draft.league_id).where(runnable_draft_filter())))
         for league_id in league_ids:
             self.start(league_id)
 
@@ -110,7 +112,8 @@ class DraftRunner:
         with self.session_factory() as db:
             draft = db.scalar(select(Draft).where(Draft.league_id == league_id).with_for_update())
             if draft is None or draft.status not in {
-                DraftStatus.ACTIVE.value, DraftStatus.COMPLETED.value
+                DraftStatus.ACTIVE.value,
+                DraftStatus.COMPLETED.value,
             }:
                 return False
             lease_expiry = draft.lease_expires_at
@@ -371,7 +374,15 @@ def build_draft_context(
             "minimums": {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "DST": 1, "K": 1},
         },
         "roster": [
-            {"player_id": player.id, "name": player.full_name, "position": player.position}
+            {
+                "player_id": player.id,
+                "name": player.full_name,
+                "position": player.position,
+                "nfl_team": player.nfl_team,
+                "status": player.status,
+                "active": player.active,
+                "injury_status": player.injury_status,
+            }
             for _, player in roster_rows
         ],
         "available_players": [
@@ -380,6 +391,8 @@ def build_draft_context(
                 "name": player.full_name,
                 "position": player.position,
                 "nfl_team": player.nfl_team,
+                "status": player.status,
+                "active": player.active,
                 "injury_status": player.injury_status,
                 "bye_week": player.bye_week,
                 "rank": (player.metadata_json or {}).get("rank", 10**9),

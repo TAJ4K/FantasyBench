@@ -34,6 +34,7 @@ from app.schemas.api import (
     AddDropRequest,
     DropRequest,
     LeagueInitializeRequest,
+    LineupReviewRequest,
     LineupSetRequest,
     StatsLoadRequest,
     TradeActionRequest,
@@ -805,13 +806,16 @@ async def run_lineup_review(
     request: Request,
     db: DbSession,
     _: AdminAccess,
+    payload: LineupReviewRequest | None = None,
     week: int | None = None,
     league_id: str | None = None,
 ) -> dict[str, str]:
     league = current_league(db, league_id)
     ensure_league_unlocked(db, league.id)
     return await request.app.state.manager_automation.set_all_lineups(
-        league.id, week or max(1, league.current_week)
+        league.id,
+        week or max(1, league.current_week),
+        admin_message=payload.admin_message if payload else None,
     )
 
 

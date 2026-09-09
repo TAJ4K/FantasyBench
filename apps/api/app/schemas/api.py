@@ -104,6 +104,10 @@ class StatsLoadRequest(BaseModel):
     stats: list[StatsLoadItem]
 
 
+class LineupReviewRequest(BaseModel):
+    admin_message: str | None = Field(default=None, min_length=1, max_length=4000)
+
+
 class TriggerDecisionRequest(BaseModel):
     team_id: str
     decision_type: Literal["DRAFT", "WAIVER", "LINEUP", "TRADE", "MEMORY", "COMMENTARY"]
