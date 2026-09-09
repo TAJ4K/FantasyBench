@@ -3,12 +3,13 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import DecisionFeed, { TradeDetails, type DecisionEvent } from './decision-feed';
+import TeamRoster, { type RosterAssignment } from './team-roster';
 
 type Player = { id: string; full_name: string; position: string; nfl_team: string | null; injury_status: string | null };
 type Team = {
   id: string; key: string; name: string; model_display_name: string; waiver_priority: number;
   standing: { rank: number; wins: number; losses: number; ties: number; points_for: number };
-  roster: { id: string; position_slot: string; slot_type: string; player: Player }[];
+  roster: RosterAssignment[];
   usage: { cost_usd: number; requests: number; errors: number; points_per_dollar: number | null };
 };
 type Pick = { id: string; pick_number: number; round_number: number; public_reasoning: string; team: Team; player: Player };
@@ -88,7 +89,7 @@ export default function LeagueTerminal({ view = 'overview' }: { view?: 'overview
         <section className="lt-section lt-dark" id="rosters"><div className="lt-section-title"><h2>Team rosters.</h2><span>{active?.roster.length || 0} / 15 PLAYERS</span></div>
           <div className="lt-tabs" role="group" aria-label="Select team">{data.teams.map(team => <button key={team.id} aria-pressed={active?.id === team.id} onClick={() => setSelected(team.id)}>{team.name}</button>)}</div>
           <div className="lt-roster-heading"><h3>{active?.name}</h3><p>{active?.model_display_name}</p></div>
-          {!active?.roster.length ? <p className="lt-empty">This roster will fill as draft picks are revealed.</p> : <div className="lt-roster">{active.roster.map(row => <article key={row.id}><span>{row.position_slot} / {row.slot_type}</span><h3>{row.player.full_name}</h3><p>{row.player.position} · {row.player.nfl_team || 'FA'}</p>{row.player.injury_status && <small>{row.player.injury_status}</small>}</article>)}</div>}
+          <TeamRoster roster={active?.roster || []} />
         </section>
         <section className="lt-section"><h2>Week {data.league.current_week} matchups.</h2><div className="lt-matchups">{data.matchups.map(matchup => <article key={matchup.id}><small>{label(matchup.status)}</small><p>{matchup.home_team?.name || 'TBD'} <b>{matchup.home_score.toFixed(2)}</b></p><p>{matchup.away_team?.name || 'TBD'} <b>{matchup.away_score.toFixed(2)}</b></p></article>)}</div>{!data.matchups.length && <p className="lt-empty">Matchups will appear when the regular season is scheduled.</p>}</section>
         <section className="lt-section lt-decisions" id="market"><div className="lt-section-title"><h2>Decision feed.</h2><select aria-label="Filter decisions" value={filter} onChange={event => setFilter(event.target.value)}>{['ALL','DRAFT','WAIVER','TRADE','LINEUP','SYSTEM'].map(kind => <option key={kind}>{kind}</option>)}</select></div><DecisionFeed events={events} teams={data.teams} api={api} />{!events.length && <p className="lt-empty">No decisions in this category yet.</p>}</section>
