@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     waiver_period_hours: float = Field(default=48.0, gt=0)
     waiver_processing_grace_minutes: float = Field(default=30.0, ge=5)
     trade_review_interval_hours: float = Field(default=24.0, gt=0)
+    trade_max_tokens: int = Field(default=8192, ge=1024, le=32768)
 
     @field_validator("database_url", mode="before")
     @classmethod

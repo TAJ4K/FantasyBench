@@ -124,7 +124,17 @@ class OpenRouterProvider:
             await self._limiter.acquire()
             try:
                 response = await self._client.post(
-                    "/chat/completions", json=payload, headers=self._headers
+                    "/chat/completions",
+                    json=payload,
+                    headers=self._headers,
+                    timeout=(
+                        httpx.Timeout(
+                            max(300.0, self._client.timeout.read or 300.0),
+                            connect=self._client.timeout.connect,
+                        )
+                        if request.decision_type in {"TRADE_RESPONSE", "TRADE_PROPOSAL"}
+                        else self._client.timeout
+                    ),
                 )
                 if response.status_code < 400:
                     break

@@ -47,6 +47,13 @@ Public LLM usage exposes `cached_input_tokens`; provider raw usage remains audit
 including malformed paid responses. Overview polling omits bulky decision context
 snapshots and excludes unfinished requests from the error count.
 
+Trade decisions use `TRADE_MAX_TOKENS` (8,192 by default) and retry a truncated
+response once with twice the allowance, capped at 32,768. Each attempt passes
+the existing spending checks and is recorded separately. Daily trade reviews
+follow new proposals and counteroffers through the negotiation limit in the same
+run. Accepted starter trades restore legal lineups atomically, preserving kickoff
+locks; trades that cannot leave a legal lineup still fail validation.
+
 ## Operations and migration to the Linux host
 
 Run `heroku pg:backups:capture -a fantasy-bench` before upgrades and before migration.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 
 import httpx
 import pytest
@@ -97,6 +98,19 @@ async def test_openrouter_structured_success_and_usage() -> None:
     assert result.request_id == "request-123"
     assert (result.input_tokens, result.output_tokens, result.reasoning_tokens) == (11, 7, 3)
     assert result.cost_usd == 0.004
+
+
+@pytest.mark.asyncio
+async def test_trade_completion_has_time_for_larger_output_budget() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.extensions["timeout"]["read"] >= 300
+        return _success(request)
+
+    provider, client = await _provider(handler)
+    try:
+        await provider.decide(replace(_request(), decision_type="TRADE_RESPONSE"))
+    finally:
+        await client.aclose()
 
 
 @pytest.mark.asyncio

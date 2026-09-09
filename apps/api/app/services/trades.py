@@ -248,11 +248,6 @@ def accept_trade(db: Session, *, offer_id: str, accepting_team_id: str) -> Trade
     if offer.recipient_team_id != accepting_team_id:
         raise ConflictError("NOT_TRADE_RECIPIENT", "Only the recipient may accept this offer.")
     paired = _validate_assets(db, offer)
-    if any(assignment.slot_type == "STARTER" for _, assignment in paired):
-        raise ConflictError(
-            "TRADE_STARTER_REQUIRES_LINEUP_CHANGE",
-            "Move traded starters to the bench with a complete legal lineup before accepting.",
-        )
     league = db.get(League, thread.league_id)
     if league is not None:
         roster_service = RosterService(db)
@@ -291,6 +286,7 @@ def accept_trade(db: Session, *, offer_id: str, accepting_team_id: str) -> Trade
         if any(roster_sizes[t] - outgoing[t] + incoming[t] > limit for t in team_ids):
             raise ConflictError("TRADE_ROSTER_FULL", "The trade would exceed a roster limit.")
 
+    lineups = _post_trade_lineups(db, paired, team_rosters)
     offer.status = "ACCEPTED"
     thread.status = "ACCEPTED"
     for asset, assignment in paired:
@@ -313,9 +309,88 @@ def accept_trade(db: Session, *, offer_id: str, accepting_team_id: str) -> Trade
                 "to_team_id": asset.to_team_id,
             },
         )
+    db.flush()
+    roster_service = RosterService(db)
+    for team_id, lineup in lineups.items():
+        roster_service.set_lineup(team_id, lineup)
+        if league is not None and league.current_week > 0:
+            roster_service.record_current_lineup(
+                team_id,
+                week=league.current_week,
+                source="TRADE",
+                public_reasoning="Legal lineup restored after an accepted trade.",
+            )
     thread.status = "PROCESSED"
     db.flush()
     return thread
+
+
+def _post_trade_lineups(
+    db: Session,
+    paired: list[tuple[TradeAsset, RosterAssignment]],
+    team_rosters: dict[str, list[RosterAssignment]],
+) -> dict[str, dict[str, str]]:
+    """Plan legal lineups before moving assets, preserving locks and preferring incumbents."""
+    service = RosterService(db)
+    traded = {assignment.player_id for _, assignment in paired}
+    affected = {asset.from_team_id for asset, row in paired if row.slot_type == "STARTER"}
+    result: dict[str, dict[str, str]] = {}
+    for team_id in sorted(affected):
+        team = db.get(Team, team_id)
+        assert team is not None
+        remaining = [row for row in team_rosters[team_id] if row.player_id not in traded]
+        incoming = [row for asset, row in paired if asset.to_team_id == team_id]
+        slots = [
+            position if int(count) == 1 else f"{position}{index}"
+            for position, count in team.league.roster_config["starters"].items()
+            for index in range(1, int(count) + 1)
+        ]
+        current = {
+            row.position_slot: row.player_id
+            for row in remaining
+            if row.slot_type == "STARTER" and row.position_slot
+        }
+        locked = {
+            row.player_id for row in remaining if service.is_player_locked(team.league, row.player)
+        }
+        lineup = {slot: player_id for slot, player_id in current.items() if player_id in locked}
+        candidates = [
+            row for row in remaining if row.slot_type != "IR" and row.player_id not in locked
+        ] + incoming
+        choices = {
+            slot: sorted(
+                [row for row in candidates if service.is_eligible_for_slot(team, row.player, slot)],
+                key=lambda row: (row.player_id != current.get(slot), row.player_id),
+            )
+            for slot in slots
+            if slot not in lineup
+        }
+        ordered = sorted(choices, key=lambda slot: len(choices[slot]))
+        if not _fill_trade_lineup(ordered, choices, lineup):
+            raise ConflictError(
+                "TRADE_STARTER_REQUIRES_LINEUP_CHANGE",
+                "The post-trade roster cannot fill a legal lineup without moving locked players.",
+            )
+        result[team_id] = lineup
+    return result
+
+
+def _fill_trade_lineup(
+    slots: list[str],
+    choices: dict[str, list[RosterAssignment]],
+    lineup: dict[str, str],
+) -> bool:
+    if not slots:
+        return True
+    slot = slots[0]
+    for row in choices[slot]:
+        if row.player_id in lineup.values():
+            continue
+        lineup[slot] = row.player_id
+        if _fill_trade_lineup(slots[1:], choices, lineup):
+            return True
+        del lineup[slot]
+    return False
 
 
 def reject_trade(db: Session, *, offer_id: str, rejecting_team_id: str) -> TradeThread:

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import replace
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.agents.contracts import LLMProvider, LLMRequest
+from app.agents.contracts import LLMProvider, LLMRequest, LLMResult
+from app.agents.errors import LLMResponseError
 from app.agents.memory import ManagerMemoryService
 from app.agents.prompts import build_prompt
 from app.agents.service import LLMInvocationService
@@ -389,6 +391,34 @@ class ManagerAutomation:
                     "trade_proposal_failed",
                     extra={"league_id": league_id, "team_id": team_id},
                 )
+        # Follow newly created offers and counters in this review, without repeatedly
+        # invoking failed offers or generating another wave of proposals.
+        seen = set(pending_offer_ids)
+        for _ in range(self.settings.max_trade_negotiation_rounds):
+            with self.session_factory() as db:
+                offers = list(
+                    db.scalars(
+                        select(TradeOffer.id)
+                        .join(TradeThread, TradeThread.id == TradeOffer.thread_id)
+                        .where(
+                            TradeThread.league_id == league_id,
+                            TradeThread.status.in_(("PROPOSED", "COUNTERED")),
+                            TradeOffer.status.in_(("PROPOSED", "COUNTERED")),
+                            TradeOffer.sequence == TradeThread.negotiation_rounds,
+                            TradeOffer.id.not_in(seen),
+                        )
+                        .order_by(TradeOffer.created_at)
+                    )
+                )
+            if not offers:
+                break
+            for offer_id in offers:
+                seen.add(offer_id)
+                try:
+                    results[f"offer:{offer_id}"] = await self._respond_to_trade(league_id, offer_id)
+                except Exception as exc:
+                    results[f"offer:{offer_id}"] = f"FAILED: {exc}"
+                    logger.exception("trade_response_failed", extra={"offer_id": offer_id})
         return results
 
     async def _respond_to_trade(self, league_id: str, offer_id: str) -> str:
@@ -421,6 +451,8 @@ class ManagerAutomation:
                 "other_roster": toolbox.get_roster(offer.proposer_team_id),
                 "standings": toolbox.get_standings(),
                 "max_negotiation_rounds": self.settings.max_trade_negotiation_rounds,
+                "negotiation_rounds": offer.sequence,
+                "can_counter": offer.sequence < self.settings.max_trade_negotiation_rounds,
             }
             prompt = build_prompt("trade", context)
             request = _request(
@@ -434,8 +466,10 @@ class ManagerAutomation:
                 context,
                 self.settings,
             )
-            result = await self._invocation(db).invoke(request)
+            result = await self._invoke_trade(db, request)
             decision = TradeResponseDecision.model_validate(result.parsed)
+            if decision.offer_id != offer_id:
+                raise ValueError("trade response refers to a different offer")
         with self.session_factory() as db:
             if decision.action == "accept":
                 thread = accept_trade(db, offer_id=offer_id, accepting_team_id=team.id)
@@ -510,7 +544,7 @@ class ManagerAutomation:
                 context,
                 self.settings,
             )
-            result = await self._invocation(db).invoke(request)
+            result = await self._invoke_trade(db, request)
             decision = TradeProposalDecision.model_validate(result.parsed)
         if decision.action == "pass":
             return False
@@ -545,6 +579,17 @@ class ManagerAutomation:
         )
         return True
 
+    async def _invoke_trade(self, db: Session, request: LLMRequest) -> LLMResult:
+        try:
+            return await self._invocation(db).invoke(request)
+        except LLMResponseError as exc:
+            choices = exc.raw_response.get("choices") or [{}]
+            if choices[0].get("finish_reason") != "length":
+                raise
+            # A fresh invocation preserves usage auditing and budget checks for both calls.
+            retry = replace(request, max_tokens=min(32768, (request.max_tokens or 8192) * 2))
+            return await self._invocation(db).invoke(retry)
+
     def _record_memory(
         self,
         league_id: str,
@@ -577,9 +622,7 @@ class ManagerAutomation:
         )
 
 
-def _resolve_lineup_players(
-    db: Session, team_id: str, lineup: dict[str, str]
-) -> dict[str, str]:
+def _resolve_lineup_players(db: Session, team_id: str, lineup: dict[str, str]) -> dict[str, str]:
     """Resolve exact, unambiguous roster names without changing manager selections."""
     players = list(
         db.scalars(
@@ -593,9 +636,7 @@ def _resolve_lineup_players(
     for player in players:
         names.setdefault(player.full_name, []).append(player.id)
     return {
-        slot: names[value][0]
-        if value not in ids and len(names.get(value, [])) == 1
-        else value
+        slot: names[value][0] if value not in ids and len(names.get(value, [])) == 1 else value
         for slot, value in lineup.items()
     }
 
@@ -649,6 +690,10 @@ def _request(
         response_model=response_model,
         reasoning_effort=(team.reasoning_config or {}).get("effort"),
         temperature=settings.openrouter_temperature,
-        max_tokens=settings.openrouter_max_tokens,
+        max_tokens=(
+            max(settings.openrouter_max_tokens, settings.trade_max_tokens)
+            if decision_type in {"TRADE_RESPONSE", "TRADE_PROPOSAL"}
+            else settings.openrouter_max_tokens
+        ),
         metadata={"context": context},
     )

@@ -41,7 +41,15 @@ def build_prompt(decision_type: str, context: dict[str, Any]) -> Prompt:
             "The lineup object must map each lineup_slots slot to the exact player_id "
             "from roster, never to a player name or an external ID."
         ),
-        "trade": "Evaluate or propose a legal trade solely for your franchise's benefit.",
+        "trade": (
+            "Evaluate or propose a legal trade solely for your franchise's benefit. "
+            "Use exact player_id values from the supplied rosters, never names or external IDs. "
+            "Send assets belong to you; receive assets belong to the other team. "
+            "For a response, copy offer.offer_id exactly. If can_counter is false, accept or "
+            "reject; do not counter. For accept/reject return empty send and receive arrays. "
+            "Keep message and public_reasoning to one or two short sentences each. "
+            "Return only the JSON decision, without roster dumps or analysis."
+        ),
         "memory": "Summarize durable strategy; do not include hidden reasoning or sensitive data.",
     }.get(kind, "Make the requested legal fantasy-football decision.")
     dynamic = dict(context)

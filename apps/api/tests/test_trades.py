@@ -12,6 +12,57 @@ from app.services.initialization import initialize_league
 from app.services.trades import accept_trade, counter_trade, propose_trade
 
 
+@pytest.mark.parametrize("replacement_position", ["RB", "WR"])
+def test_starter_trade_repairs_lineups_or_leaves_all_assets_untouched(
+    db: Session, replacement_position: str
+) -> None:
+    league = initialize_league(db, nfl_season=2026)
+    league.current_week = 1
+    league.roster_config = {"starters": {"RB": 1}, "bench": 3, "ir": 1}
+    first, second = league.teams[:2]
+    players = [
+        Player(full_name="Starter", position="RB"),
+        Player(full_name="Replacement", position=replacement_position),
+    ]
+    db.add_all(players)
+    db.flush()
+    rows = [
+        RosterAssignment(
+            league_id=league.id,
+            team_id=team.id,
+            player_id=player.id,
+            slot_type="STARTER" if index == 0 else "BENCH",
+            position_slot="RB" if index == 0 else None,
+            acquired_via="DRAFT",
+        )
+        for index, (team, player) in enumerate(zip((first, second), players, strict=True))
+    ]
+    db.add_all(rows)
+    db.flush()
+    thread, offer = propose_trade(
+        db,
+        league_id=league.id,
+        proposer_team_id=first.id,
+        recipient_team_id=second.id,
+        send_player_ids=[players[0].id],
+        receive_player_ids=[players[1].id],
+    )
+    if replacement_position == "WR":
+        with pytest.raises(ConflictError, match="post-trade roster"):
+            accept_trade(db, offer_id=offer.id, accepting_team_id=second.id)
+        assert thread.status == "PROPOSED"
+        assert [row.team_id for row in rows] == [first.id, second.id]
+        assert rows[0].slot_type == "STARTER"
+        assert not list(db.scalars(select(Transaction)))
+    else:
+        accept_trade(db, offer_id=offer.id, accepting_team_id=second.id)
+        assert thread.status == "PROCESSED"
+        assert rows[1].team_id == first.id
+        assert (rows[1].slot_type, rows[1].position_slot) == ("STARTER", "RB")
+        assert rows[0].team_id == second.id
+        assert len(list(db.scalars(select(Transaction)))) == 2
+
+
 def test_counter_and_atomic_trade_execution() -> None:
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
@@ -50,9 +101,12 @@ def test_counter_and_atomic_trade_execution() -> None:
         accept_trade(db, offer_id=counter.id, accepting_team_id=first.id)
         detail = get_trade(db, thread.id)
         assert len(detail["offers"]) == 2
-        assert {
-            asset["player"]["full_name"] for asset in detail["offers"][1]["assets"]
-        } == {"Player 0", "Player 1", "Player 2", "Player 3"}
+        assert {asset["player"]["full_name"] for asset in detail["offers"][1]["assets"]} == {
+            "Player 0",
+            "Player 1",
+            "Player 2",
+            "Player 3",
+        }
         owners = dict(
             db.execute(select(RosterAssignment.player_id, RosterAssignment.team_id)).all()
         )
