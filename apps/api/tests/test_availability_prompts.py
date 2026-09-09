@@ -36,11 +36,27 @@ async def test_admin_message_and_availability_reach_every_manager(engine):
         assert request.prompt_version == "lineup_v3"
 
 
-def test_lineup_review_accepts_admin_message(app_client, admin_headers):
+def test_lineup_review_accepts_admin_message(app_client, admin_headers, monkeypatch):
     league = app_client.post(
         "/api/v1/admin/initialize", headers=admin_headers, json={"nfl_season": 2026}
     ).json()["league"]
+    from app.api import mutations
+
+    sessions = []
+    original_guard = mutations.ensure_league_unlocked
+
+    def capture_guard(db, league_id):
+        sessions.append(db)
+        return original_guard(db, league_id)
+
+    monkeypatch.setattr(mutations, "ensure_league_unlocked", capture_guard)
+
+    async def review(*args, **kwargs):
+        assert not sessions[-1].in_transaction(), "Release row lock before automation"
+        return {"team": "COMPLETE"}
+
     automation = AsyncMock()
+    automation.set_all_lineups.side_effect = review
     automation.set_all_lineups.return_value = {"team": "COMPLETE"}
     app_client.app.state.manager_automation = automation
     response = app_client.post(

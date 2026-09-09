@@ -812,6 +812,9 @@ async def run_lineup_review(
 ) -> dict[str, str]:
     league = current_league(db, league_id)
     ensure_league_unlocked(db, league.id)
+    # Automation uses its own session and rechecks the league lock there.
+    # Release this request's row lock before handing off to that session.
+    db.commit()
     return await request.app.state.manager_automation.set_all_lineups(
         league.id,
         week or max(1, league.current_week),
