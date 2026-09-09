@@ -43,9 +43,11 @@ function RosterRow({ slot, assignment, score, loading }: { slot: string; assignm
     <span className="roster-slot" data-position={position} aria-label={`${slot} slot`}>{position}</span>
     <PlayerPortrait key={player?.id || 'empty'} player={player} />
     <div className="roster-player">
-      <span className="roster-player-name">{player?.full_name || 'Empty slot'}</span>
+      <div className="roster-player-name-line">
+        <span className="roster-player-name" title={player?.full_name}>{player?.full_name || 'Empty slot'}</span>
+        {player?.injury_status && <span className="roster-injury">{player.injury_status}</span>}
+      </div>
       <span className="roster-player-meta">{player ? `${player.position} · ${player.nfl_team || 'FA'}` : 'Awaiting assignment'}</span>
-      {player?.injury_status && <span className="roster-injury">{player.injury_status}</span>}
     </div>
     <span className="roster-points" aria-label={`Average fantasy points: ${score?.average.toFixed(1) ?? (loading && player ? 'loading' : 'unavailable')}`}>{score?.average.toFixed(1) ?? (loading && player ? '…' : '—')}</span>
     <span className="roster-points" aria-label={`Last week fantasy points: ${score?.lastWeek?.toFixed(1) ?? (loading && player ? 'loading' : 'unavailable')}`}>{score?.lastWeek?.toFixed(1) ?? (loading && player ? '…' : '—')}</span>
