@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import DecisionFeed, { TradeDetails, type DecisionEvent } from './decision-feed';
+import { TradeDetails, type DecisionEvent } from './decision-feed';
+import ScrollableDecisionFeed from './scrollable-decision-feed';
 import TeamRoster, { type RosterAssignment } from './team-roster';
 
 type Player = { id: string; full_name: string; position: string; nfl_team: string | null; injury_status: string | null };
@@ -60,7 +61,6 @@ export default function LeagueTerminal({ view = 'overview' }: { view?: 'overview
   const turn = draft ? Math.floor((draft.current_pick_number - 1) / 8) : 0;
   const offset = draft ? (draft.current_pick_number - 1) % 8 : 0;
   const onClock = data?.teams.find(team => team.id === draft?.order[turn % 2 ? 7 - offset : offset]);
-  const events = data?.events.filter(event => filter === 'ALL' || event.kind === filter) || [];
   return <main className="shell live-terminal">
     <header className="topbar">
       <Link className="wordmark" href="/"><span className="mark">FB</span><span>FANTASY / BENCH</span></Link>
@@ -92,7 +92,7 @@ export default function LeagueTerminal({ view = 'overview' }: { view?: 'overview
           <TeamRoster roster={active?.roster || []} api={api} leagueId={data.league.id} season={data.league.nfl_season} currentWeek={data.league.current_week} />
         </section>
         <section className="lt-section"><h2>Week {data.league.current_week} matchups.</h2><div className="lt-matchups">{data.matchups.map(matchup => <article key={matchup.id}><small>{label(matchup.status)}</small><p>{matchup.home_team?.name || 'TBD'} <b>{matchup.home_score.toFixed(2)}</b></p><p>{matchup.away_team?.name || 'TBD'} <b>{matchup.away_score.toFixed(2)}</b></p></article>)}</div>{!data.matchups.length && <p className="lt-empty">Matchups will appear when the regular season is scheduled.</p>}</section>
-        <section className="lt-section lt-decisions" id="market"><div className="lt-section-title"><h2>Decision feed.</h2><select aria-label="Filter decisions" value={filter} onChange={event => setFilter(event.target.value)}>{['ALL','DRAFT','WAIVER','TRADE','LINEUP','SYSTEM'].map(kind => <option key={kind}>{kind}</option>)}</select></div><DecisionFeed events={events} teams={data.teams} api={api} />{!events.length && <p className="lt-empty">No decisions in this category yet.</p>}</section>
+        <section className="lt-section lt-decisions" id="market"><div className="lt-section-title"><h2>Decision feed.</h2><select aria-label="Filter decisions" value={filter} onChange={event => setFilter(event.target.value)}>{['ALL','DRAFT','WAIVER','TRADE','LINEUP','SYSTEM'].map(kind => <option key={kind}>{kind}</option>)}</select></div><ScrollableDecisionFeed teams={data.teams} api={api} leagueId={data.league.id} filter={filter} liveEvents={data.events} /></section>
       </>}
       {view === 'draft' && <section className="lt-section"><div className="lt-section-title"><h2>Draft board.</h2><span>{draft?.picks_made || 0} PICKS REVEALED</span></div>
         {Array.from({length:draft?.rounds || 15}, (_, round) => <div className="lt-round" key={round}><h3>ROUND {String(round + 1).padStart(2, '0')} <span>{round % 2 ? '←' : '→'}</span></h3><div className="lt-picks">{Array.from({length:8}, (_, slot) => {

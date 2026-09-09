@@ -99,6 +99,14 @@ body { line-height: 1.5; }
 .lt-matchups p { align-items: baseline; margin: 18px 0 0; font-size: 1rem; }
 .lt-matchups b { font-size: 1.375rem; font-variant-numeric: tabular-nums; }
 .lt-decisions { background: #e8e8df; border-top: 1px solid var(--line); }
+.decision-stream { border: 1px solid #b7b9ab; background: var(--paper); }
+.decision-stream-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; padding: 12px 20px; border-bottom: 1px solid var(--line); font-size: .8125rem; color: var(--muted); }
+.decision-stream button { min-height: 44px; padding: 10px 14px; background: #f8f8f1; border: 1px solid #989e8b; color: var(--ink); font-size: .8125rem; cursor: pointer; }
+.decision-stream button:hover { background: #e5ead8; }
+.decision-stream-viewport { height: min(70vh, 760px); min-height: 320px; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; padding: 0 24px; }
+.decision-stream-viewport:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+.decision-stream .lt-feed > article:first-child { border-top: 0; }
+.decision-stream-end { padding: 24px 0; border-top: 1px solid var(--line); text-align: center; font-size: .875rem; color: var(--muted); }
 .lt-feed article { padding: 28px 0; gap: 32px; }
 .lt-feed time { font-size: .8125rem; line-height: 1.6; }
 .lt-feed strong { font-size: .875rem; letter-spacing: .025em; }
@@ -237,6 +245,8 @@ body { line-height: 1.5; }
 }
 
 @media (max-width: 560px) {
+  .decision-stream-viewport { padding: 0 14px; }
+  .decision-stream-toolbar { padding: 12px 14px; }
   :root { --page-gutter: 20px; }
   .live-terminal .topbar { position: relative; gap: 0 12px; }
   .live-terminal .wordmark { gap: 8px; font-size: .75rem; letter-spacing: 0; }

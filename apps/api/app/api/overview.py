@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, Query
-from sqlalchemy import case, func, or_, select
+from fastapi import APIRouter, HTTPException, Query
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession
@@ -40,6 +40,47 @@ def _event_kind(event_type: str) -> str:
     if event_type.startswith("LINEUP"):
         return "LINEUP"
     return "SYSTEM"
+
+
+def _public_events(
+    db: DbSession, events: list[LeagueEvent], team_by_id: dict[str, Team]
+) -> list[dict[str, Any]]:
+    referenced_player_ids = {
+        str(player_id)
+        for event in events
+        for player_id in (
+            (event.data or {}).get("player_id"),
+            (event.data or {}).get("drop_player_id"),
+        )
+        if player_id
+    }
+    players_by_id = (
+        {
+            player.id: player
+            for player in db.scalars(select(Player).where(Player.id.in_(referenced_player_ids)))
+        }
+        if referenced_player_ids
+        else {}
+    )
+    event_payload: list[dict[str, Any]] = []
+    for event in events:
+        player_id = (event.data or {}).get("player_id")
+        drop_player_id = (event.data or {}).get("drop_player_id")
+        event_payload.append(
+            serialize(event)
+            | {
+                "kind": _event_kind(event.event_type),
+                "team": serialize(team_by_id.get(event.team_id) if event.team_id else None),
+                "player": serialize(
+                    players_by_id.get(str(player_id)) if player_id is not None else None
+                ),
+                "dropped_player": serialize(
+                    players_by_id.get(str(drop_player_id)) if drop_player_id is not None else None
+                ),
+            }
+        )
+
+    return event_payload
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -208,6 +249,53 @@ def get_upcoming_actions(
     return _upcoming_actions(db, league.id, league.nfl_season, league.current_week)[:limit]
 
 
+@router.get("/league/decisions")
+def get_decisions(
+    db: DbSession,
+    league_id: str | None = None,
+    kind: Literal["ALL", "DRAFT", "WAIVER", "TRADE", "LINEUP", "SYSTEM"] = "ALL",
+    limit: int = Query(25, ge=1, le=100),
+    before: datetime | None = None,
+    before_id: str | None = None,
+) -> dict[str, Any]:
+    league = current_league(db, league_id)
+    if (before is None) != (before_id is None):
+        raise HTTPException(422, "Both cursor fields are required.")
+    event_kind = case(
+        (or_(LeagueEvent.event_type.startswith("DRAFT"),
+             LeagueEvent.event_type.in_(("ON_THE_CLOCK", "LLM_THINKING"))), "DRAFT"),
+        (or_(LeagueEvent.event_type.startswith("WAIVER"),
+             LeagueEvent.event_type.startswith("PLAYER_")), "WAIVER"),
+        (LeagueEvent.event_type.startswith("TRADE"), "TRADE"),
+        (LeagueEvent.event_type.startswith("LINEUP"), "LINEUP"),
+        else_="SYSTEM",
+    )
+    query = select(LeagueEvent).where(
+        LeagueEvent.league_id == league.id, LeagueEvent.visibility == "PUBLIC"
+    )
+    if kind != "ALL":
+        query = query.where(event_kind == kind)
+    if before is not None:
+        query = query.where(or_(
+            LeagueEvent.occurred_at < before,
+            and_(LeagueEvent.occurred_at == before, LeagueEvent.id < before_id),
+        ))
+    rows = list(db.scalars(query.order_by(
+        LeagueEvent.occurred_at.desc(), LeagueEvent.id.desc()
+    ).limit(limit + 1)))
+    events = rows[:limit]
+    teams = {team.id: team for team in db.scalars(
+        select(Team).where(Team.league_id == league.id)
+    )}
+    return {
+        "items": _public_events(db, events, teams),
+        "next_cursor": {
+            "before": events[-1].occurred_at.isoformat(),
+            "before_id": events[-1].id,
+        } if len(rows) > limit else None,
+    }
+
+
 @router.get("/overview")
 def get_spectator_overview(
     db: DbSession,
@@ -302,40 +390,7 @@ def get_spectator_overview(
             .limit(event_limit)
         )
     )
-    referenced_player_ids = {
-        str(player_id)
-        for event in events
-        for player_id in (
-            (event.data or {}).get("player_id"),
-            (event.data or {}).get("drop_player_id"),
-        )
-        if player_id
-    }
-    players_by_id = (
-        {
-            player.id: player
-            for player in db.scalars(select(Player).where(Player.id.in_(referenced_player_ids)))
-        }
-        if referenced_player_ids
-        else {}
-    )
-    event_payload: list[dict[str, Any]] = []
-    for event in events:
-        player_id = (event.data or {}).get("player_id")
-        drop_player_id = (event.data or {}).get("drop_player_id")
-        event_payload.append(
-            serialize(event)
-            | {
-                "kind": _event_kind(event.event_type),
-                "team": serialize(team_by_id.get(event.team_id) if event.team_id else None),
-                "player": serialize(
-                    players_by_id.get(str(player_id)) if player_id is not None else None
-                ),
-                "dropped_player": serialize(
-                    players_by_id.get(str(drop_player_id)) if drop_player_id is not None else None
-                ),
-            }
-        )
+    event_payload = _public_events(db, events, team_by_id)
 
     revealed_picks = db.scalars(
         select(DraftPick)
