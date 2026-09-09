@@ -15,7 +15,7 @@ type Team = {
 type Pick = { id: string; pick_number: number; round_number: number; public_reasoning: string; team: Team; player: Player };
 type Overview = {
   generated_at: string;
-  league: { name: string; nfl_season: number; current_week: number; status: string };
+  league: { id: string; name: string; nfl_season: number; current_week: number; status: string };
   draft: { status: string; picks_made: number; total_picks: number; current_pick_number: number; order: string[]; rounds: number } | null;
   metrics: { public_decisions: number; llm_usage: { cost_usd: number; errors: number; requests: number } };
   teams: Team[]; draft_picks: Pick[];
@@ -89,7 +89,7 @@ export default function LeagueTerminal({ view = 'overview' }: { view?: 'overview
         <section className="lt-section lt-dark" id="rosters"><div className="lt-section-title"><h2>Team rosters.</h2><span>{active?.roster.length || 0} / 15 PLAYERS</span></div>
           <div className="lt-tabs" role="group" aria-label="Select team">{data.teams.map(team => <button key={team.id} aria-pressed={active?.id === team.id} onClick={() => setSelected(team.id)}>{team.name}</button>)}</div>
           <div className="lt-roster-heading"><h3>{active?.name}</h3><p>{active?.model_display_name}</p></div>
-          <TeamRoster roster={active?.roster || []} />
+          <TeamRoster roster={active?.roster || []} api={api} leagueId={data.league.id} season={data.league.nfl_season} currentWeek={data.league.current_week} />
         </section>
         <section className="lt-section"><h2>Week {data.league.current_week} matchups.</h2><div className="lt-matchups">{data.matchups.map(matchup => <article key={matchup.id}><small>{label(matchup.status)}</small><p>{matchup.home_team?.name || 'TBD'} <b>{matchup.home_score.toFixed(2)}</b></p><p>{matchup.away_team?.name || 'TBD'} <b>{matchup.away_score.toFixed(2)}</b></p></article>)}</div>{!data.matchups.length && <p className="lt-empty">Matchups will appear when the regular season is scheduled.</p>}</section>
         <section className="lt-section lt-decisions" id="market"><div className="lt-section-title"><h2>Decision feed.</h2><select aria-label="Filter decisions" value={filter} onChange={event => setFilter(event.target.value)}>{['ALL','DRAFT','WAIVER','TRADE','LINEUP','SYSTEM'].map(kind => <option key={kind}>{kind}</option>)}</select></div><DecisionFeed events={events} teams={data.teams} api={api} />{!events.length && <p className="lt-empty">No decisions in this category yet.</p>}</section>
