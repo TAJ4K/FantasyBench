@@ -77,7 +77,12 @@ class OpenRouterProvider:
             "model": request.model,
             "messages": [
                 {"role": "system", "content": request.system_prompt},
-                {"role": "user", "content": request.user_prompt},
+                {
+                    "role": "user",
+                    "content": request.user_prompt
+                    + "\nReturn exactly this JSON schema: "
+                    + json.dumps(schema),
+                },
             ],
             "response_format": {
                 "type": "json_schema",
@@ -90,10 +95,13 @@ class OpenRouterProvider:
             payload["response_format"] = {"type": "json_object"}
             payload["messages"][1]["content"] += "\nRequired JSON schema: " + json.dumps(schema)
         if request.model.startswith(("anthropic/", "qwen/")):
-            payload["messages"][0]["content"] = [{
-                "type": "text", "text": request.system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }]
+            payload["messages"][0]["content"] = [
+                {
+                    "type": "text",
+                    "text": request.system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
         if request.reasoning_effort:
             payload["reasoning"] = {"effort": request.reasoning_effort}
         if request.temperature is not None and not request.model.startswith("openai/gpt-5"):
@@ -105,6 +113,7 @@ class OpenRouterProvider:
             input_rate, output_rate = prices
             payload["provider"] = {
                 "sort": "price",
+                "require_parameters": True,
                 "max_price": {
                     "prompt": float(input_rate),
                     "completion": float(output_rate),

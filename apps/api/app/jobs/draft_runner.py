@@ -336,10 +336,14 @@ def build_draft_context(
     candidates.sort(
         key=lambda player: (int((player.metadata_json or {}).get("rank", 10**9)), player.id)
     )
-    catalog_players = list(db.scalars(select(Player).where(
-        Player.active.is_(True),
-        Player.position.in_(("QB", "RB", "WR", "TE", "DST", "K")),
-    )))
+    catalog_players = list(
+        db.scalars(
+            select(Player).where(
+                Player.active.is_(True),
+                Player.position.in_(("QB", "RB", "WR", "TE", "DST", "K")),
+            )
+        )
+    )
     catalog_players.sort(key=lambda p: (int((p.metadata_json or {}).get("rank", 10**9)), p.id))
     context: dict[str, Any] = {
         "player_catalog": [
