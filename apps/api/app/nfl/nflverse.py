@@ -25,6 +25,9 @@ class NflverseProvider:
         "https://github.com/nflverse/nflverse-data/releases/download/"
         "stats_player/stats_player_week_{season}.csv"
     )
+    identities_url = (
+        "https://raw.githubusercontent.com/dynastyprocess/data/master/files/db_playerids.csv"
+    )
 
     def __init__(
         self,
@@ -33,6 +36,8 @@ class NflverseProvider:
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self._owns_client = client is None
+        self.stats_available = False
+        self.week_stats_complete = False
         self._client = client or httpx.AsyncClient(
             timeout=httpx.Timeout(timeout_seconds), follow_redirects=True
         )
@@ -45,6 +50,20 @@ class NflverseProvider:
         del season
         return []
 
+    async def get_player_identities(self) -> dict[str, str]:
+        rows = await self._csv_rows(self.identities_url)
+        if not rows or not {"sleeper_id", "gsis_id"} <= rows[0].keys():
+            raise ValueError("Player identity feed is empty or has an unexpected schema")
+        identities: dict[str, str] = {}
+        for row in rows:
+            sleeper = _text(row.get("sleeper_id"))
+            gsis = _text(row.get("gsis_id"))
+            if sleeper and sleeper.isdigit() and gsis and gsis.startswith("00-"):
+                if sleeper in identities and identities[sleeper] != gsis:
+                    raise ValueError(f"Ambiguous NFL identity for Sleeper player {sleeper}")
+                identities[sleeper] = gsis
+        return identities
+
     async def get_injuries(self, season: int, week: int) -> list[NFLPlayerRecord]:
         del season, week
         return []
@@ -53,7 +72,7 @@ class NflverseProvider:
         rows = await self._csv_rows(self.schedule_url)
         records: list[NFLGameRecord] = []
         for row in rows:
-            if _integer(row.get("season")) != season:
+            if _integer(row.get("season")) != season or row.get("game_type", "REG") != "REG":
                 continue
             provider_id = _text(row.get("game_id")) or _text(row.get("old_game_id"))
             home = _team(row.get("home_team"))
@@ -86,15 +105,32 @@ class NflverseProvider:
         return records
 
     async def get_week_stats(self, season: int, week: int) -> list[NFLStatRecord]:
-        stats_rows = await self._csv_rows(self.stats_url.format(season=season))
+        self.stats_available = self.week_stats_complete = False
+        try:
+            stats_rows = await self._csv_rows(self.stats_url.format(season=season))
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return []  # The new season's file is published after the first games.
+            raise
+        if not stats_rows or not {"player_id", "season", "week", "team"} <= stats_rows[0].keys():
+            raise ValueError("NFL stats feed is empty or has an unexpected schema")
         schedule_rows = await self._csv_rows(self.schedule_url)
         points_allowed = _points_allowed(schedule_rows, season, week)
+        expected_teams = {
+            team
+            for game in schedule_rows
+            if _integer(game.get("season")) == season
+            and _integer(game.get("week")) == week
+            and game.get("game_type", "REG") == "REG"
+            for team in (_team(game.get("home_team")), _team(game.get("away_team")))
+            if team
+        }
         records: list[NFLStatRecord] = []
         dst: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
         for row in stats_rows:
             if _integer(row.get("season")) != season or _integer(row.get("week")) != week:
                 continue
-            if str(row.get("season_type") or "REG").upper() not in {"REG", "POST"}:
+            if str(row.get("season_type") or "REG").upper() != "REG":
                 continue
             player_id = _text(row.get("player_id"))
             if player_id:
@@ -117,11 +153,17 @@ class NflverseProvider:
             team_stats["dst_fumble_recoveries"] += _first_number(
                 row, "fumble_recovery_opp", "def_fumble_recoveries"
             )
-            team_stats["dst_touchdowns"] += _first_number(
+            team_stats["dst_touchdowns"] += _sum_numbers(
                 row, "def_tds", "fumble_recovery_tds", "special_teams_tds"
             )
             team_stats["dst_safeties"] += _first_number(row, "def_safeties")
-            team_stats["dst_blocked_kicks"] += _first_number(row, "def_blocked_kicks")
+            team_stats["dst_blocked_kicks"] += (
+                _sum_numbers(row, "def_punt_blocks", "def_pat_blocks", "def_fg_blocks")
+                if any(key in row for key in ("def_punt_blocks", "def_pat_blocks", "def_fg_blocks"))
+                else _first_number(row, "def_blocked_kicks")
+            )
+        self.stats_available = bool(records)
+        self.week_stats_complete = bool(expected_teams) and expected_teams <= dst.keys()
         for team, team_stats in dst.items():
             if team in points_allowed:
                 team_stats["dst_points_allowed"] = points_allowed[team]
@@ -154,24 +196,28 @@ def _fantasy_stats(row: dict[str, str]) -> dict[str, float]:
         "receiving_yards": _first_number(row, "receiving_yards"),
         "receiving_touchdowns": _first_number(row, "receiving_tds", "receiving_touchdowns"),
         "receiving_two_point_conversions": _first_number(row, "receiving_2pt_conversions"),
-        "fumbles_lost": _first_number(
+        "fumbles_lost": _number(row.get("fumbles_lost_total"))
+        if _number(row.get("fumbles_lost_total")) is not None
+        else _sum_numbers(
             row,
             "rushing_fumbles_lost",
             "receiving_fumbles_lost",
             "sack_fumbles_lost",
         ),
         "extra_points_made": _first_number(row, "pat_made", "extra_points_made"),
-        "field_goals_0_39": _first_number(row, "fg_made_0_19", "fg_made_20_29", "fg_made_30_39"),
+        "field_goals_0_39": _sum_numbers(row, "fg_made_0_19", "fg_made_20_29", "fg_made_30_39"),
         "field_goals_40_49": _first_number(row, "fg_made_40_49"),
-        "field_goals_50_plus": _first_number(row, "fg_made_50_59", "fg_made_60_"),
+        "field_goals_50_plus": _sum_numbers(row, "fg_made_50_59", "fg_made_60_"),
     }
-    return {key: value for key, value in values.items() if value}
+    return {key: value for key, value in values.items() if value is not None and value}
 
 
 def _points_allowed(rows: list[dict[str, str]], season: int, week: int) -> dict[str, float]:
     result: dict[str, float] = {}
     for row in rows:
         if _integer(row.get("season")) != season or _integer(row.get("week")) != week:
+            continue
+        if row.get("game_type", "REG") != "REG":
             continue
         home = _team(row.get("home_team"))
         away = _team(row.get("away_team"))
@@ -184,6 +230,14 @@ def _points_allowed(rows: list[dict[str, str]], season: int, week: int) -> dict[
 
 
 def _first_number(row: dict[str, str], *keys: str) -> float:
+    for key in keys:
+        value = _number(row.get(key))
+        if value is not None:
+            return value
+    return 0.0
+
+
+def _sum_numbers(row: dict[str, str], *keys: str) -> float:
     return sum(_number(row.get(key)) or 0.0 for key in keys)
 
 

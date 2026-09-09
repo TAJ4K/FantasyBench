@@ -101,7 +101,8 @@ class SleeperProvider:
         return []
 
     async def get_injuries(self, season: int, week: int) -> list[NFLPlayerRecord]:
-        return [p for p in await self.get_players(season) if p.injury_status]
+        # Include healthy players so a resolved designation is cleared, too.
+        return await self.get_players(season)
 
 
 def _full_name(raw: dict[str, Any]) -> str:

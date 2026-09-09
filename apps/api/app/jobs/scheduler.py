@@ -130,7 +130,7 @@ class LeagueScheduler:
                     self.draft_runner.start(league_id)
 
                 all_leagues = list(db.scalars(select(League).where(League.locked.is_(False))))
-                schedule_bucket = now.date().isoformat()
+                schedule_bucket = str(int(now.timestamp() // 300))
                 for league in all_leagues:
                     job = self._claim_job(
                         db,
@@ -148,7 +148,7 @@ class LeagueScheduler:
                     players_job = self._claim_job(
                         db,
                         "nfl_player_sync",
-                        schedule_bucket,
+                        now.date().isoformat(),
                         kind="nfl_players",
                         target_id=league.id,
                         week=None,
@@ -270,7 +270,7 @@ class LeagueScheduler:
                 )
                 for league in leagues:
                     ensure_waiver_period(db, league=league, week=league.current_week)
-                    injury_bucket = int(now.timestamp() // (6 * 3600))
+                    injury_bucket = int(now.timestamp() // 3600)
                     injury_job = self._claim_job(
                         db,
                         "nfl_injury_sync",
@@ -610,7 +610,21 @@ class LeagueScheduler:
         try:
             with self.session_factory() as db:
                 result = await NFLDataSyncService(db, provider).sync_players(season)
-            return {"updated": str(result.updated), "inserted": str(result.inserted)}
+            identity_provider = NflverseProvider()
+            try:
+                identities = await identity_provider.get_player_identities()
+                with self.session_factory() as db:
+                    enriched = NFLDataSyncService(db, identity_provider).sync_player_identities(
+                        identities
+                    )
+            finally:
+                await identity_provider.aclose()
+            return {
+                "updated": str(result.updated),
+                "inserted": str(result.inserted),
+                "identities_updated": str(enriched.updated),
+                "identity_conflicts": str(enriched.skipped),
+            }
         finally:
             await provider.aclose()
 
@@ -622,8 +636,13 @@ class LeagueScheduler:
             season = league.nfl_season
         provider = NflverseProvider()
         try:
+            identities = await provider.get_player_identities()
             with self.session_factory() as db:
-                result = await NFLDataSyncService(db, provider).sync_week_stats(season, week)
+                service = NFLDataSyncService(db, provider)
+                service.sync_player_identities(identities)
+                result = await service.sync_week_stats(season, week)
+            if not provider.stats_available:
+                return {"status": "awaiting_stats_publication", "week_completed": "false"}
         finally:
             await provider.aclose()
 
@@ -664,7 +683,7 @@ class LeagueScheduler:
             already_complete = bool(matchups) and all(
                 matchup.status == "COMPLETE" for matchup in matchups
             )
-            if all_final and matchups and not already_complete:
+            if all_final and provider.week_stats_complete and matchups and not already_complete:
                 for matchup in matchups:
                     complete_matchup(db, matchup_id=matchup.id, season=season)
                 emit_event(db, league_id, "WEEK_COMPLETED", data={"week": week})

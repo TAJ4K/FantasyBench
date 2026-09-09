@@ -35,6 +35,29 @@ class NFLDataSyncService:
         records = await self.provider.get_schedule(season)
         return self._transaction(lambda: self._upsert_schedule(records))
 
+    def sync_player_identities(self, identities: dict[str, str]) -> SyncResult:
+        """Enrich existing Sleeper players without replacing health/roster metadata."""
+
+        def apply() -> SyncResult:
+            players = list(self.session.scalars(select(Player)))
+            owners = {p.gsis_id: p for p in players if p.gsis_id}
+            updated = skipped = 0
+            for player in players:
+                gsis = identities.get(player.sleeper_id or "")
+                if not gsis or player.gsis_id == gsis:
+                    continue
+                if player.gsis_id or (gsis in owners and owners[gsis] is not player):
+                    skipped += 1
+                    logger.warning("nfl_identity_conflict", extra={"player_id": player.id})
+                    continue
+                player.gsis_id = gsis
+                player.external_ids = {**(player.external_ids or {}), "gsis": gsis}
+                owners[gsis] = player
+                updated += 1
+            return SyncResult(updated=updated, skipped=skipped)
+
+        return self._transaction(apply)
+
     async def sync_week_stats(self, season: int, week: int) -> SyncResult:
         records = await self.provider.get_week_stats(season, week)
         return self._transaction(lambda: self._upsert_stats(records))
