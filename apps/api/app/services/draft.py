@@ -463,6 +463,18 @@ class DraftService:
             raise DomainError(
                 "INVALID_DRAFT_ORDER", "Order must contain each league team exactly once."
             )
+        teams = {
+            team.id: team
+            for team in self.db.scalars(select(Team).where(Team.league_id == league_id))
+        }
+        # Move through distinct temporary positions to avoid the immediate unique
+        # constraint while swapping existing draft slots on PostgreSQL and SQLite.
+        for position, team_id in enumerate(order, 1):
+            teams[team_id].draft_position = -position
+        self.db.flush()
+        for position, team_id in enumerate(order, 1):
+            teams[team_id].draft_position = position
+            teams[team_id].waiver_priority = len(order) + 1 - position
         draft.order = list(order)
         draft.random_seed = random_seed
         self.db.flush()

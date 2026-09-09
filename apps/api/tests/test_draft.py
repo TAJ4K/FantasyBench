@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, DomainError
 from app.models.base import Base
-from app.models.entities import Draft, DraftPick, Player, RosterAssignment
+from app.models.entities import Draft, DraftPick, Player, RosterAssignment, Team
 from app.models.enums import DraftPickState, DraftStatus
 from app.services.draft import DraftService, pick_coordinates, team_for_pick
 from app.services.initialization import initialize_league
@@ -121,5 +121,20 @@ def test_round_transition_and_completion() -> None:
         )
         assert [(pick.round, pick.round_pick) for pick in picks[7:9]] == [(1, 8), (2, 1)]
         assert len({pick.player_id for pick in picks}) == 16
+    finally:
+        db.close()
+
+
+def test_randomized_order_updates_positions_and_reverse_waivers() -> None:
+    db, league_id, _ = _database()
+    try:
+        draft = db.scalar(select(Draft).where(Draft.league_id == league_id))
+        assert draft is not None
+        order = list(reversed(draft.order))
+        DraftService(db).set_order(league_id, order)
+        db.commit()
+        teams = list(db.scalars(select(Team).order_by(Team.draft_position)))
+        assert [team.id for team in teams] == order
+        assert [team.waiver_priority for team in teams] == list(range(8, 0, -1))
     finally:
         db.close()

@@ -35,7 +35,7 @@ count toward the provider key cap but not the league's usage table.
 3. Confirm eight teams, one reception point, 15 snake rounds and continual rolling waivers.
 4. Confirm active players include every required position and model preflight succeeds.
 5. Back up PostgreSQL, then explicitly POST `/api/v1/draft/start` with `X-Admin-API-Key`.
-6. Watch `/api/v1/draft` and `/api/v1/llm-runs` for progress and failures.
+6. Watch `/api/v1/draft` and `/api/v1/llm/runs` for progress and failures.
 
 Qwen's current configured ID is `qwen/qwen3.8-max-0902` (verified September 9, 2026).
 Sleeper search rank is retained to order draft candidates; it is a popularity rank,
