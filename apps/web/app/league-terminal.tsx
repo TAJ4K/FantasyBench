@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import DecisionFeed, { TradeDetails, type DecisionEvent } from './decision-feed';
 
 type Player = { id: string; full_name: string; position: string; nfl_team: string | null; injury_status: string | null };
 type Team = {
@@ -17,9 +18,9 @@ type Overview = {
   draft: { status: string; picks_made: number; total_picks: number; current_pick_number: number; order: string[]; rounds: number } | null;
   metrics: { public_decisions: number; llm_usage: { cost_usd: number; errors: number; requests: number } };
   teams: Team[]; draft_picks: Pick[];
-  events: { id: string; event_type: string; kind: string; occurred_at: string; team: Team | null; player: Player | null; data: { public_reasoning?: string } }[];
+  events: DecisionEvent[];
   matchups: { id: string; home_team: Team | null; away_team: Team | null; home_score: number; away_score: number; status: string }[];
-  upcoming_actions: { kind: string; action: string; scheduled_at: string; home_team?: string; away_team?: string }[];
+  upcoming_actions: { kind: string; action: string; scheduled_at: string; home_team?: string; away_team?: string; trade_id?: string }[];
 };
 const colors: Record<string, string> = {gpt:'#d7ff3f',claude:'#ff7854',glm:'#8bd4ff',deepseek:'#c3a6ff',qwen:'#ffc85b',grok:'#ef93c8',gemini:'#84e1c2',kimi:'#aeb3bb'};
 const api = (process.env.NEXT_PUBLIC_API_URL || '/backend').replace(/\/$/, '');
@@ -62,7 +63,7 @@ export default function LeagueTerminal({ view = 'overview' }: { view?: 'overview
   return <main className="shell live-terminal">
     <header className="topbar">
       <Link className="wordmark" href="/"><span className="mark">FB</span><span>FANTASY / BENCH</span></Link>
-      <nav aria-label="Primary navigation"><Link className={view === 'overview' ? 'active' : ''} href="/">Terminal</Link><Link href="/#league">League</Link><Link href="/#rosters">Rosters</Link><Link className={view === 'draft' ? 'active' : ''} href="/draft">Draft</Link><Link href="/actions">Actions</Link><Link href="/rules">Rules</Link></nav>
+      <nav aria-label="Primary navigation"><Link className={view === 'overview' ? 'active' : ''} aria-current={view === 'overview' ? 'page' : undefined} href="/">Terminal</Link><Link href="/#league">League</Link><Link href="/#rosters">Rosters</Link><Link className={view === 'draft' ? 'active' : ''} aria-current={view === 'draft' ? 'page' : undefined} href="/draft">Draft</Link><Link className={view === 'actions' ? 'active' : ''} aria-current={view === 'actions' ? 'page' : undefined} href="/actions">Actions</Link><Link href="/rules">Rules</Link></nav>
       <div className="season-control"><span className={`live-dot ${connection !== 'LIVE' ? 'offline' : ''}`} />{connection}</div>
     </header>
     <section className="lt-intro">
@@ -86,11 +87,11 @@ export default function LeagueTerminal({ view = 'overview' }: { view?: 'overview
         </section>
         <section className="lt-section lt-dark" id="rosters"><div className="lt-section-title"><h2>Team rosters.</h2><span>{active?.roster.length || 0} / 15 PLAYERS</span></div>
           <div className="lt-tabs" role="group" aria-label="Select team">{data.teams.map(team => <button key={team.id} aria-pressed={active?.id === team.id} onClick={() => setSelected(team.id)}>{team.name}</button>)}</div>
-          <h3>{active?.name}</h3><p>{active?.model_display_name}</p>
+          <div className="lt-roster-heading"><h3>{active?.name}</h3><p>{active?.model_display_name}</p></div>
           {!active?.roster.length ? <p className="lt-empty">This roster will fill as draft picks are revealed.</p> : <div className="lt-roster">{active.roster.map(row => <article key={row.id}><span>{row.position_slot} / {row.slot_type}</span><h3>{row.player.full_name}</h3><p>{row.player.position} · {row.player.nfl_team || 'FA'}</p>{row.player.injury_status && <small>{row.player.injury_status}</small>}</article>)}</div>}
         </section>
         <section className="lt-section"><h2>Week {data.league.current_week} matchups.</h2><div className="lt-matchups">{data.matchups.map(matchup => <article key={matchup.id}><small>{label(matchup.status)}</small><p>{matchup.home_team?.name || 'TBD'} <b>{matchup.home_score.toFixed(2)}</b></p><p>{matchup.away_team?.name || 'TBD'} <b>{matchup.away_score.toFixed(2)}</b></p></article>)}</div>{!data.matchups.length && <p className="lt-empty">Matchups will appear when the regular season is scheduled.</p>}</section>
-        <section className="lt-section"><div className="lt-section-title"><h2>Decision feed.</h2><select aria-label="Filter decisions" value={filter} onChange={event => setFilter(event.target.value)}>{['ALL','DRAFT','WAIVER','TRADE','LINEUP','SYSTEM'].map(kind => <option key={kind}>{kind}</option>)}</select></div><div className="lt-feed">{events.map(event => <article key={event.id}><time>{new Date(event.occurred_at).toLocaleString()}</time><div><strong>{label(event.event_type)}</strong><p>{event.team?.name}{event.player ? ` · ${event.player.full_name}` : ''}</p>{event.data.public_reasoning && <p>{event.data.public_reasoning}</p>}</div></article>)}</div>{!events.length && <p className="lt-empty">No decisions in this category yet.</p>}</section>
+        <section className="lt-section lt-decisions" id="market"><div className="lt-section-title"><h2>Decision feed.</h2><select aria-label="Filter decisions" value={filter} onChange={event => setFilter(event.target.value)}>{['ALL','DRAFT','WAIVER','TRADE','LINEUP','SYSTEM'].map(kind => <option key={kind}>{kind}</option>)}</select></div><DecisionFeed events={events} teams={data.teams} api={api} />{!events.length && <p className="lt-empty">No decisions in this category yet.</p>}</section>
       </>}
       {view === 'draft' && <section className="lt-section"><div className="lt-section-title"><h2>Draft board.</h2><span>{draft?.picks_made || 0} PICKS REVEALED</span></div>
         {Array.from({length:draft?.rounds || 15}, (_, round) => <div className="lt-round" key={round}><h3>ROUND {String(round + 1).padStart(2, '0')} <span>{round % 2 ? '←' : '→'}</span></h3><div className="lt-picks">{Array.from({length:8}, (_, slot) => {
@@ -100,7 +101,7 @@ export default function LeagueTerminal({ view = 'overview' }: { view?: 'overview
           return <article key={pickNumber} className={draft?.current_pick_number === pickNumber && draft.status === 'ACTIVE' ? 'lt-on-clock' : ''} style={{borderTopColor: colors[owner?.key || '']}}><small>PICK {String(pickNumber).padStart(3,'0')}</small><h4>{owner?.name || 'TBD'}</h4>{pick ? <><strong>{pick.player.full_name}</strong><span>{pick.player.position} · {pick.player.nfl_team || 'FA'}</span><p>{pick.public_reasoning}</p></> : <p className="lt-pending">{draft?.current_pick_number === pickNumber && draft.status === 'ACTIVE' ? 'On the clock…' : 'Awaiting selection'}</p>}</article>;
         })}</div></div>)}
       </section>}
-      {view === 'actions' && <section className="lt-section"><h2>Upcoming actions.</h2><p>Times follow your browser’s local time zone. Waiver priority rolls after each successful claim and never resets with standings.</p><div className="lt-feed">{data.upcoming_actions.map((action,index) => <article key={`${action.action}-${action.scheduled_at}-${index}`}><time>{new Date(action.scheduled_at).toLocaleString()}</time><div><strong>{label(action.action)}</strong><p>{action.home_team && `${action.away_team} at ${action.home_team}`}{!action.home_team && action.kind}</p></div></article>)}</div>{!data.upcoming_actions.length && <p className="lt-empty">No upcoming deadlines have been scheduled yet.</p>}</section>}
+      {view === 'actions' && <section className="lt-section"><h2>Upcoming actions.</h2><p>Times follow your browser’s local time zone. Waiver priority rolls after each successful claim and never resets with standings.</p><div className="lt-feed">{data.upcoming_actions.map((action,index) => <article key={`${action.action}-${action.scheduled_at}-${index}`}><time>{new Date(action.scheduled_at).toLocaleString()}</time><div><strong>{label(action.action)}</strong><p>{action.home_team && `${action.away_team} at ${action.home_team}`}{!action.home_team && action.kind}</p>{action.trade_id && <TradeDetails api={api} tradeId={action.trade_id} teams={data.teams} />}</div></article>)}</div>{!data.upcoming_actions.length && <p className="lt-empty">No upcoming deadlines have been scheduled yet.</p>}</section>}
     </>}
     <footer className="lt-footer"><Link href="/rules">LEAGUE RULES ↗</Link><span>8 TEAMS · FULL PPR · CONTINUAL ROLLING WAIVERS</span><Link href="/actions">ACTIONS CALENDAR ↗</Link></footer>
   </main>;
