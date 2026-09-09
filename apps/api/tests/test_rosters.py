@@ -7,6 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, DomainError
+from app.jobs.manager_automation import _resolve_lineup_players
 from app.models.base import Base
 from app.models.entities import NflGame, Player, RosterAssignment, Team
 from app.services.initialization import initialize_league
@@ -68,6 +69,40 @@ def test_valid_lineup_and_flex_eligibility() -> None:
         with pytest.raises(DomainError) as exc:
             service.validate_lineup(team.id, illegal)
         assert exc.value.code == "INELIGIBLE_LINEUP_SLOT"
+    finally:
+        db.close()
+
+
+def test_manager_lineup_names_resolve_to_roster_ids_before_validation() -> None:
+    db, team, players = _roster_database()
+    try:
+        expected = _valid_lineup(players)
+        names = {player.id: player.full_name for player in players.values()}
+        submitted = {slot: names[player_id] for slot, player_id in expected.items()}
+        submitted["QB"] = expected["QB"]  # Mixed names and IDs are also supported.
+        resolved = _resolve_lineup_players(db, team.id, submitted)
+        assert resolved == expected
+        RosterService(db).set_lineup(team.id, resolved)
+        assert all(row.slot_type == "STARTER" for row in db.query(RosterAssignment).all())
+        resolved["FLEX"] = resolved["QB"]
+        with pytest.raises(ConflictError, match="only one lineup slot"):
+            RosterService(db).set_lineup(team.id, resolved)
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize("reference", ["Unknown player", "Player", "Player 1"])
+def test_manager_lineup_does_not_guess_unknown_or_ambiguous_names(reference: str) -> None:
+    db, team, players = _roster_database()
+    try:
+        players["p2"].full_name = players["p1"].full_name
+        db.commit()
+        lineup = _valid_lineup(players)
+        lineup["RB1"] = reference
+        resolved = _resolve_lineup_players(db, team.id, lineup)
+        assert resolved["RB1"] == reference
+        with pytest.raises(DomainError, match="Every starter must belong"):
+            RosterService(db).set_lineup(team.id, resolved)
     finally:
         db.close()
 

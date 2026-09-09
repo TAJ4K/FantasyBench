@@ -131,6 +131,7 @@ class ManagerAutomation:
             result = await self._invocation(db).invoke(request)
             decision = LineupDecisionResponse.model_validate(result.parsed)
         with self.session_factory() as db:
+            decision.lineup = _resolve_lineup_players(db, team_id, decision.lineup)
             RosterService(db).set_lineup(team_id, decision.lineup)
             record = LineupDecision(
                 league_id=league_id,
@@ -574,6 +575,29 @@ class ManagerAutomation:
             season_budget_usd=self.settings.openrouter_season_budget_usd,
             max_single_request_usd=self.settings.openrouter_max_single_request_usd,
         )
+
+
+def _resolve_lineup_players(
+    db: Session, team_id: str, lineup: dict[str, str]
+) -> dict[str, str]:
+    """Resolve exact, unambiguous roster names without changing manager selections."""
+    players = list(
+        db.scalars(
+            select(Player)
+            .join(RosterAssignment, RosterAssignment.player_id == Player.id)
+            .where(RosterAssignment.team_id == team_id)
+        )
+    )
+    ids = {player.id for player in players}
+    names: dict[str, list[str]] = {}
+    for player in players:
+        names.setdefault(player.full_name, []).append(player.id)
+    return {
+        slot: names[value][0]
+        if value not in ids and len(names.get(value, [])) == 1
+        else value
+        for slot, value in lineup.items()
+    }
 
 
 def _lineup_slots(roster_config: dict[str, Any]) -> list[dict[str, Any]]:

@@ -23,7 +23,7 @@ class Prompt:
 DECISION_VERSIONS = {
     "draft": "draft_v2",
     "waiver": "waiver_v1",
-    "lineup": "lineup_v1",
+    "lineup": "lineup_v2",
     "trade": "trade_v1",
     "memory": "memory_v1",
 }
@@ -37,7 +37,9 @@ def build_prompt(decision_type: str, context: dict[str, Any]) -> Prompt:
         "waiver": "Submit zero or more legal waiver claims in preference order.",
         "lineup": (
             "Set a legal lineup from your roster. Preserve every locked_slots assignment exactly; "
-            "choose among unlocked players only for the remaining slots."
+            "choose among unlocked players only for the remaining slots. "
+            "The lineup object must map each lineup_slots slot to the exact player_id "
+            "from roster, never to a player name or an external ID."
         ),
         "trade": "Evaluate or propose a legal trade solely for your franchise's benefit.",
         "memory": "Summarize durable strategy; do not include hidden reasoning or sensitive data.",
