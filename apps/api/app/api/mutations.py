@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import timedelta
 from typing import Any
 
@@ -660,7 +661,7 @@ async def sync_nfl(
             raise ConflictError(
                 "INVALID_SYNC_CATEGORY", "category must be players, injuries, schedule, or stats"
             )
-        return serialize(result)
+        return asdict(result)
     finally:
         await provider.aclose()
 

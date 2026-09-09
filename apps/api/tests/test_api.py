@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
@@ -233,3 +234,19 @@ def test_overview_does_not_count_inflight_requests_as_errors(
     usage = app_client.get("/api/v1/overview").json()["metrics"]["llm_usage"]
     assert usage["requests"] == 1
     assert usage["errors"] == 0
+
+
+def test_manual_stats_sync_serializes_result(app_client, admin_headers, monkeypatch):
+    from app.nfl.nflverse import NflverseProvider
+
+    async def unpublished(self, season, week):
+        return []
+
+    monkeypatch.setattr(NflverseProvider, "get_week_stats", unpublished)
+    app_client.post("/api/v1/admin/initialize", json={"nfl_season": 2026}, headers=admin_headers)
+    response = app_client.post(
+        "/api/v1/admin/nfl/sync?category=stats&week=1", headers=admin_headers
+    )
+    assert response.status_code == 200
+    assert response.json() == {"inserted": 0, "updated": 0, "skipped": 0}
+
