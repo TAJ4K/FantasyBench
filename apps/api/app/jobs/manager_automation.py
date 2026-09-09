@@ -15,6 +15,7 @@ from app.agents.prompts import build_prompt
 from app.agents.service import LLMInvocationService
 from app.agents.tools import LeagueToolbox
 from app.core.config import Settings
+from app.core.errors import ConflictError
 from app.models.base import utcnow
 from app.models.entities import (
     League,
@@ -421,7 +422,9 @@ class ManagerAutomation:
                     logger.exception("trade_response_failed", extra={"offer_id": offer_id})
         return results
 
-    async def _respond_to_trade(self, league_id: str, offer_id: str) -> str:
+    async def _respond_to_trade(
+        self, league_id: str, offer_id: str, *, validation_error: str | None = None
+    ) -> str:
         with self.session_factory() as db:
             ensure_league_unlocked(db, league_id)
             offer = db.get(TradeOffer, offer_id)
@@ -453,6 +456,14 @@ class ManagerAutomation:
                 "max_negotiation_rounds": self.settings.max_trade_negotiation_rounds,
                 "negotiation_rounds": offer.sequence,
                 "can_counter": offer.sequence < self.settings.max_trade_negotiation_rounds,
+                "roster_config": team.league.roster_config,
+                "validation_error": validation_error,
+                "execution_rules": (
+                    "Both post-trade active rosters must fit starters plus bench capacity. "
+                    "Incoming players count as active even if previously on IR. No players are "
+                    "automatically dropped. A trade must leave legal lineups. If acceptance "
+                    "is illegal, counter with legal assets or reject."
+                ),
             }
             prompt = build_prompt("trade", context)
             request = _request(
@@ -470,35 +481,50 @@ class ManagerAutomation:
             decision = TradeResponseDecision.model_validate(result.parsed)
             if decision.offer_id != offer_id:
                 raise ValueError("trade response refers to a different offer")
-        with self.session_factory() as db:
-            if decision.action == "accept":
-                thread = accept_trade(db, offer_id=offer_id, accepting_team_id=team.id)
-                event_type = "TRADE_ACCEPTED"
-            elif decision.action == "counter":
-                thread, _ = counter_trade(
+        try:
+            with self.session_factory() as db:
+                if decision.action == "accept":
+                    thread = accept_trade(db, offer_id=offer_id, accepting_team_id=team.id)
+                    event_type = "TRADE_ACCEPTED"
+                elif decision.action == "counter":
+                    thread, _ = counter_trade(
+                        db,
+                        offer_id=offer_id,
+                        countering_team_id=team.id,
+                        send_player_ids=[asset.id for asset in decision.send],
+                        receive_player_ids=[asset.id for asset in decision.receive],
+                        message=decision.message,
+                        public_reasoning=decision.public_reasoning,
+                        max_rounds=self.settings.max_trade_negotiation_rounds,
+                    )
+                    event_type = "TRADE_COUNTERED"
+                else:
+                    thread = reject_trade(db, offer_id=offer_id, rejecting_team_id=team.id)
+                    event_type = "TRADE_REJECTED"
+                emit_event(
                     db,
-                    offer_id=offer_id,
-                    countering_team_id=team.id,
-                    send_player_ids=[asset.id for asset in decision.send],
-                    receive_player_ids=[asset.id for asset in decision.receive],
-                    message=decision.message,
-                    public_reasoning=decision.public_reasoning,
-                    max_rounds=self.settings.max_trade_negotiation_rounds,
+                    league_id,
+                    event_type,
+                    aggregate_type="TRADE",
+                    aggregate_id=thread.id,
+                    team_id=team.id,
+                    commentary=decision.public_reasoning,
                 )
-                event_type = "TRADE_COUNTERED"
-            else:
-                thread = reject_trade(db, offer_id=offer_id, rejecting_team_id=team.id)
-                event_type = "TRADE_REJECTED"
-            emit_event(
-                db,
+                db.commit()
+        except ConflictError as exc:
+            if validation_error is not None or exc.code not in {
+                "TRADE_ROSTER_FULL",
+                "TRADE_STARTER_REQUIRES_LINEUP_CHANGE",
+                "TRADE_ROUND_LIMIT",
+                "INVALID_TRADE_ASSETS",
+                "TRADE_ASSET_NOT_OWNED",
+            }:
+                raise
+            return await self._respond_to_trade(
                 league_id,
-                event_type,
-                aggregate_type="TRADE",
-                aggregate_id=thread.id,
-                team_id=team.id,
-                commentary=decision.public_reasoning,
+                offer_id,
+                validation_error=f"Your {decision.action} could not execute: {exc.code}: {exc}",
             )
-            db.commit()
         self._record_memory(
             league_id,
             team.id,

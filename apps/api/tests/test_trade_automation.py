@@ -8,11 +8,81 @@ from app.agents.contracts import LLMRequest, LLMResult
 from app.agents.errors import LLMBudgetExceeded, LLMResponseError
 from app.agents.fake import DeterministicFakeProvider
 from app.core.config import Settings
+from app.core.errors import ConflictError
 from app.jobs.manager_automation import ManagerAutomation, _request
 from app.models.entities import LLMRun, Player, RosterAssignment, TradeThread
 from app.schemas.decisions import TradeResponseDecision
 from app.services.initialization import initialize_league
 from app.services.trades import propose_trade
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("corrects_decision", [True, False])
+async def test_roster_limit_feedback_is_bounded_and_preserves_ownership(
+    engine: Engine, db: Session, monkeypatch: pytest.MonkeyPatch, corrects_decision: bool
+) -> None:
+    league = initialize_league(db, nfl_season=2026)
+    league.roster_config = {"starters": {"RB": 1}, "bench": 1, "ir": 1}
+    first, second = league.teams[:2]
+    players = [Player(full_name=f"RB {i}", position="RB") for i in range(4)]
+    db.add_all(players)
+    db.flush()
+    rows = [
+        RosterAssignment(
+            league_id=league.id,
+            team_id=first.id if i < 2 else second.id,
+            player_id=player.id,
+            slot_type="BENCH",
+            acquired_via="DRAFT",
+        )
+        for i, player in enumerate(players)
+    ]
+    db.add_all(rows)
+    db.flush()
+    thread, offer = propose_trade(
+        db,
+        league_id=league.id,
+        proposer_team_id=first.id,
+        recipient_team_id=second.id,
+        send_player_ids=[players[0].id],
+        receive_player_ids=[players[2].id, players[3].id],
+    )
+    db.commit()
+    original_owners = [row.team_id for row in rows]
+    contexts = []
+
+    class CorrectingProvider:
+        async def decide(self, request: LLMRequest) -> LLMResult:
+            context = request.metadata["context"]
+            contexts.append(context)
+            return LLMResult(
+                parsed=TradeResponseDecision(
+                    action="reject"
+                    if context["validation_error"] and corrects_decision
+                    else "accept",
+                    offer_id=offer.id,
+                    message="Decision",
+                    public_reasoning="Roster constraints",
+                ),
+                raw_response={},
+            )
+
+    automation = ManagerAutomation(
+        sessionmaker(engine, expire_on_commit=False), CorrectingProvider(), Settings()
+    )
+    monkeypatch.setattr(automation, "_record_memory", lambda *args, **kwargs: None)
+    if corrects_decision:
+        assert await automation._respond_to_trade(league.id, offer.id) == "REJECT"
+    else:
+        with pytest.raises(ConflictError, match="roster limit"):
+            await automation._respond_to_trade(league.id, offer.id)
+    assert len(contexts) == 2
+    assert contexts[0]["validation_error"] is None
+    assert "TRADE_ROSTER_FULL" in contexts[1]["validation_error"]
+    assert contexts[1]["roster_config"]["bench"] == 1
+    db.expire_all()
+    assert [row.team_id for row in rows] == original_owners
+    assert thread.status == ("REJECTED" if corrects_decision else "PROPOSED")
 
 
 @pytest.mark.asyncio
