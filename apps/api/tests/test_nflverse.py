@@ -167,6 +167,10 @@ async def test_identity_enrichment_and_injury_clear(db) -> None:
         await NFLDataSyncService(db, SleeperProvider(client=client)).sync_injuries(2026, 1)
     assert player.injury_status is None
     assert player.gsis_id == "00-0038542"
+    player.gsis_id = " 00-0038542"
+    db.commit()
+    assert NFLDataSyncService(db, provider).sync_player_identities(mapping).updated == 1
+    assert player.gsis_id == "00-0038542"
 
 
 @pytest.mark.asyncio

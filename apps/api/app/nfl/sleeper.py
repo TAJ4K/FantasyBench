@@ -54,7 +54,7 @@ class SleeperProvider:
             external = {"sleeper": str(sleeper_id)}
             for key in ("gsis_id", "espn_id", "sportradar_id", "yahoo_id"):
                 if raw.get(key) is not None:
-                    external[key.removesuffix("_id")] = str(raw[key])
+                    external[key.removesuffix("_id")] = str(raw[key]).strip()
             injury = raw.get("injury_status")
             status = str(raw.get("status") or ("INJURED" if injury else "ACTIVE")).upper()
             active_value = raw.get("active")
@@ -110,4 +110,4 @@ def _full_name(raw: dict[str, Any]) -> str:
 
 
 def _string(value: Any) -> str | None:
-    return str(value) if value is not None and str(value).strip() else None
+    return str(value).strip() if value is not None and str(value).strip() else None

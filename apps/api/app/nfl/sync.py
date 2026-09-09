@@ -40,13 +40,15 @@ class NFLDataSyncService:
 
         def apply() -> SyncResult:
             players = list(self.session.scalars(select(Player)))
-            owners = {p.gsis_id: p for p in players if p.gsis_id}
+            owners = {p.gsis_id.strip(): p for p in players if p.gsis_id}
             updated = skipped = 0
             for player in players:
                 gsis = identities.get(player.sleeper_id or "")
                 if not gsis or player.gsis_id == gsis:
                     continue
-                if player.gsis_id or (gsis in owners and owners[gsis] is not player):
+                if (player.gsis_id and player.gsis_id.strip() != gsis) or (
+                    gsis in owners and owners[gsis] is not player
+                ):
                     skipped += 1
                     logger.warning("nfl_identity_conflict", extra={"player_id": player.id})
                     continue
@@ -82,7 +84,7 @@ class NFLDataSyncService:
 
     def _upsert_players(self, records: list[NFLPlayerRecord]) -> SyncResult:
         players = list(self.session.scalars(select(Player)))
-        by_gsis = {p.gsis_id: p for p in players if p.gsis_id}
+        by_gsis = {p.gsis_id.strip(): p for p in players if p.gsis_id}
         by_provider: dict[str, Player] = {}
         for player in players:
             if self.provider.name == "sleeper" and player.sleeper_id:
@@ -170,7 +172,7 @@ class NFLDataSyncService:
         if self.provider.name == "sleeper":
             provider_players.update({p.sleeper_id: p for p in players if p.sleeper_id})
         if self.provider.name == "nflverse":
-            provider_players.update({p.gsis_id: p for p in players if p.gsis_id})
+            provider_players.update({p.gsis_id.strip(): p for p in players if p.gsis_id})
             provider_players.update(
                 {
                     f"DST:{player.nfl_team}": player
