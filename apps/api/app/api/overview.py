@@ -132,7 +132,9 @@ def _team_usage(db: DbSession, league_id: str) -> dict[str, dict[str, Any]]:
             func.count(LLMRun.id),
             func.coalesce(func.sum(LLMRun.cost_usd), 0),
             func.coalesce(func.avg(LLMRun.latency_ms), 0),
-            func.count(LLMRun.id).filter(LLMRun.success.is_(False)),
+            func.count(LLMRun.id).filter(
+                LLMRun.success.is_(False), LLMRun.completed_at.is_not(None)
+            ),
         )
         .where(LLMRun.league_id == league_id)
         .group_by(LLMRun.team_id)
@@ -203,9 +205,7 @@ def get_upcoming_actions(
     limit: int = Query(50, ge=1, le=200),
 ) -> list[dict[str, Any]]:
     league = current_league(db, league_id)
-    return _upcoming_actions(
-        db, league.id, league.nfl_season, league.current_week
-    )[:limit]
+    return _upcoming_actions(db, league.id, league.nfl_season, league.current_week)[:limit]
 
 
 @router.get("/overview")
@@ -233,9 +233,7 @@ def get_spectator_overview(
         )
         cost = float(usage["cost_usd"])
         usage["points_per_dollar"] = (
-            round(float(standing_by_team[team.id]["points_for"]) / cost, 2)
-            if cost > 0
-            else None
+            round(float(standing_by_team[team.id]["points_for"]) / cost, 2) if cost > 0 else None
         )
 
     pending_players = select(DraftPick.player_id).where(
@@ -334,9 +332,7 @@ def get_spectator_overview(
                     players_by_id.get(str(player_id)) if player_id is not None else None
                 ),
                 "dropped_player": serialize(
-                    players_by_id.get(str(drop_player_id))
-                    if drop_player_id is not None
-                    else None
+                    players_by_id.get(str(drop_player_id)) if drop_player_id is not None else None
                 ),
             }
         )
@@ -349,7 +345,7 @@ def get_spectator_overview(
         .limit(draft_pick_limit)
     ).all()
     pick_payload = [
-        public_draft_pick(pick)
+        {key: value for key, value in public_draft_pick(pick).items() if key != "context_snapshot"}
         | {"team": serialize(pick.team), "player": serialize(pick.player)}
         for pick in revealed_picks
     ]
@@ -366,9 +362,7 @@ def get_spectator_overview(
     )
     league_points = round(sum(team.points_for for team in teams), 4)
     total_usage["points_per_dollar"] = (
-        round(league_points / total_usage["cost_usd"], 2)
-        if total_usage["cost_usd"] > 0
-        else None
+        round(league_points / total_usage["cost_usd"], 2) if total_usage["cost_usd"] > 0 else None
     )
     decision_rows = db.execute(
         select(LeagueEvent.event_type, LeagueEvent.data).where(

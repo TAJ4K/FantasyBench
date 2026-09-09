@@ -210,3 +210,26 @@ def test_overview_points_per_dollar_tracks_live_points_and_spend(
     team = next(item for item in overview["teams"] if item["points_for"] == 250.0)
     assert team["usage"]["points_per_dollar"] == 100.0
     assert overview["metrics"]["llm_usage"]["points_per_dollar"] == 100.0
+
+
+def test_overview_does_not_count_inflight_requests_as_errors(
+    app_client: TestClient, admin_headers: dict[str, str], engine: Engine
+) -> None:
+    app_client.post("/api/v1/admin/initialize", json={"nfl_season": 2026}, headers=admin_headers)
+    with Session(engine) as db:
+        league = db.scalar(select(League))
+        assert league is not None
+        db.add(
+            LLMRun(
+                league_id=league.id,
+                team_id=league.teams[0].id,
+                model=league.teams[0].model_identifier,
+                decision_type="DRAFT",
+                prompt_version="test",
+                success=False,
+            )
+        )
+        db.commit()
+    usage = app_client.get("/api/v1/overview").json()["metrics"]["llm_usage"]
+    assert usage["requests"] == 1
+    assert usage["errors"] == 0

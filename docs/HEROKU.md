@@ -23,7 +23,7 @@ Use `WEB_CONCURRENCY=1`, `AUTO_RESUME_DRAFT=true`, and a single web dyno.
 
 Initial limits: $15 non-resetting OpenRouter key cap, $14 application season cap,
 $10 daily cap, $1.25 conservative single-request reservation, 2,400 output tokens,
-20 requests/minute, one transport retry. Raise the provider-limit confirmation only
+20 requests/minute, one transport retry, and explicit low reasoning by default. Raise the provider-limit confirmation only
 after checking the actual key limit. The app pauses failed draft turns rather than
 silently substituting another model. Model calls made during operator preflight
 count toward the provider key cap but not the league's usage table.
@@ -43,7 +43,9 @@ not an expert ADP or projection. The model receives this distinction in its prom
 A stable 300-player reference precedes changing turn data to enable prompt-prefix
 caching. Anthropic and Qwen receive explicit cache markers; other supported models
 cache automatically. Cache hits depend on provider thresholds and retention.
-Public LLM usage exposes `cached_input_tokens`; provider raw usage remains audited.
+Public LLM usage exposes `cached_input_tokens`; provider raw usage remains audited,
+including malformed paid responses. Overview polling omits bulky decision context
+snapshots and excludes unfinished requests from the error count.
 
 ## Operations and migration to the Linux host
 

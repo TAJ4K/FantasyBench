@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.contracts import LLMProvider, LLMRequest, LLMResult
 from app.agents.costs import estimate_request_cost
-from app.agents.errors import LLMBudgetExceeded
+from app.agents.errors import LLMBudgetExceeded, LLMResponseError
 from app.models.entities import League, LLMRun
 
 logger = logging.getLogger(__name__)
@@ -89,6 +89,13 @@ class LLMInvocationService:
             )
             return result
         except Exception as exc:
+            if isinstance(exc, LLMResponseError):
+                run.raw_response = exc.raw_response
+                usage = exc.raw_response.get("usage") or {}
+                run.input_tokens = int(usage.get("prompt_tokens") or 0)
+                run.output_tokens = int(usage.get("completion_tokens") or 0)
+                run.cost_usd = Decimal(str(usage.get("cost") or 0))
+                run.estimated_cost_usd = max(run.estimated_cost_usd or Decimal("0"), run.cost_usd)
             run.error = f"{type(exc).__name__}: {exc}"[:4000]
             run.success = False
             logger.warning(

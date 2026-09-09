@@ -102,8 +102,7 @@ class OpenRouterProvider:
                     "cache_control": {"type": "ephemeral"},
                 }
             ]
-        if request.reasoning_effort:
-            payload["reasoning"] = {"effort": request.reasoning_effort}
+        payload["reasoning"] = {"effort": request.reasoning_effort or "low", "exclude": True}
         if request.temperature is not None and not request.model.startswith("openai/gpt-5"):
             payload["temperature"] = request.temperature
         if request.max_tokens is not None:
@@ -156,6 +155,7 @@ class OpenRouterProvider:
 
         if response is None:  # defensive; loop always assigns or raises
             raise LLMProviderError("OpenRouter request produced no response")
+        body: dict[str, Any] = {}
         try:
             body = response.json()
             choice = body["choices"][0]
@@ -174,7 +174,11 @@ class OpenRouterProvider:
             TypeError,
             ValueError,
         ) as exc:
-            raise LLMResponseError(f"Invalid structured response: {exc}") from exc
+            raise LLMResponseError(
+                f"Invalid structured response: {exc}; finish_reason="
+                f"{(body.get('choices') or [{}])[0].get('finish_reason')}",
+                raw_response=body,
+            ) from exc
 
         usage = body.get("usage") or {}
         details = usage.get("completion_tokens_details") or {}

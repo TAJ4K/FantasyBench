@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 
 class LLMError(RuntimeError):
     """Base error for an LLM invocation."""
@@ -14,6 +16,10 @@ class LLMProviderError(LLMError):
 
 class LLMResponseError(LLMError):
     """The provider returned a response that did not satisfy the decision schema."""
+
+    def __init__(self, message: str, *, raw_response: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.raw_response = raw_response or {}
 
 
 class LLMBudgetExceeded(LLMError):
