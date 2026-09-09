@@ -6,3 +6,10 @@
 [build.environment]
   NODE_VERSION = "22.13.0"
   NETLIFY_NEXT_PLUGIN_SKIP = "true"
+  NEXT_PUBLIC_API_URL = "/backend"
+
+[[redirects]]
+  from = "/backend/*"
+  to = "https://fantasy-bench-a54db1de30a2.herokuapp.com/:splat"
+  status = 200
+  force = true

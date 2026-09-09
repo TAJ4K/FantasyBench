@@ -62,6 +62,10 @@ def public_llm_run(run: LLMRun) -> dict[str, Any]:
         "decision_type": run.decision_type,
         "prompt_version": run.prompt_version,
         "input_tokens": run.input_tokens,
+        "cached_input_tokens": int(
+            ((run.raw_response or {}).get("usage", {}).get("prompt_tokens_details") or {})
+            .get("cached_tokens", 0) or 0
+        ),
         "output_tokens": run.output_tokens,
         "reasoning_tokens": run.reasoning_tokens,
         "estimated_cost_usd": float(run.estimated_cost_usd),

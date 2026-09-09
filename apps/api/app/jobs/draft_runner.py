@@ -191,7 +191,7 @@ class DraftRunner:
 
     async def _decide_and_pick(self, league_id: str) -> bool:
         validation_error: str | None = None
-        for attempt in range(1, self.settings.openrouter_max_retries + 1):
+        for attempt in range(1, self.settings.openrouter_max_retries + 2):
             if not self._heartbeat(league_id):
                 return False
             with self.session_factory() as db:
@@ -336,7 +336,16 @@ def build_draft_context(
     candidates.sort(
         key=lambda player: (int((player.metadata_json or {}).get("rank", 10**9)), player.id)
     )
+    catalog_players = list(db.scalars(select(Player).where(
+        Player.active.is_(True),
+        Player.position.in_(("QB", "RB", "WR", "TE", "DST", "K")),
+    )))
+    catalog_players.sort(key=lambda p: (int((p.metadata_json or {}).get("rank", 10**9)), p.id))
     context: dict[str, Any] = {
+        "player_catalog": [
+            {"id": p.id, "name": p.full_name, "pos": p.position, "team": p.nfl_team}
+            for p in catalog_players[:300]
+        ],
         "league_id": draft.league_id,
         "team_id": team.id,
         "pick_number": draft.current_pick_number,

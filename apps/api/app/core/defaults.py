@@ -83,7 +83,7 @@ DEFAULT_MANAGERS: tuple[ManagerDefinition, ...] = (
     ManagerDefinition(
         "deepseek", "Deep Value", "DeepSeek v4 Pro", "deepseek/deepseek-v4-pro", None
     ),
-    ManagerDefinition("qwen", "Latent Upside", "Qwen 3.8 Max", "qwen/qwen3.8-max", None),
+    ManagerDefinition("qwen", "Latent Upside", "Qwen 3.8 Max", "qwen/qwen3.8-max-0902", None),
     ManagerDefinition("grok", "First Principles", "Grok 4.6", "x-ai/grok-4.6", None),
     ManagerDefinition(
         "gemini", "Flash Forward", "Gemini 3.7 Flash", "google/gemini-3.7-flash", None

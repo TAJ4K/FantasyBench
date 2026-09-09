@@ -72,7 +72,7 @@ class OpenRouterProvider:
             await self._client.aclose()
 
     async def decide(self, request: LLMRequest) -> LLMResult:
-        schema = request.response_model.model_json_schema()
+        schema = _strict_schema(request.response_model.model_json_schema())
         payload: dict[str, Any] = {
             "model": request.model,
             "messages": [
@@ -84,9 +84,19 @@ class OpenRouterProvider:
                 "json_schema": {"name": request.decision_type, "strict": True, "schema": schema},
             },
         }
+        # Arbitrary lineup slot maps are not representable by strict object schemas.
+        # JSON mode still validates against the same Pydantic response model below.
+        if request.decision_type.upper() == "LINEUP":
+            payload["response_format"] = {"type": "json_object"}
+            payload["messages"][1]["content"] += "\nRequired JSON schema: " + json.dumps(schema)
+        if request.model.startswith(("anthropic/", "qwen/")):
+            payload["messages"][0]["content"] = [{
+                "type": "text", "text": request.system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }]
         if request.reasoning_effort:
             payload["reasoning"] = {"effort": request.reasoning_effort}
-        if request.temperature is not None:
+        if request.temperature is not None and not request.model.startswith("openai/gpt-5"):
             payload["temperature"] = request.temperature
         if request.max_tokens is not None:
             payload["max_tokens"] = request.max_tokens
@@ -192,3 +202,16 @@ def _error_detail(response: httpx.Response) -> str:
         return str(error)[:500]
     except ValueError:
         return response.text[:500]
+
+
+def _strict_schema(value: Any) -> Any:
+    """Strict output providers require every declared property, including nullable ones."""
+    if isinstance(value, list):
+        return [_strict_schema(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    result = {key: _strict_schema(item) for key, item in value.items() if key != "default"}
+    if result.get("type") == "object" and "properties" in result:
+        result["required"] = list(result["properties"])
+        result["additionalProperties"] = False
+    return result

@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     waiver_period_hours: float = Field(default=48.0, gt=0)
     waiver_processing_grace_minutes: float = Field(default=30.0, ge=5)
     trade_review_interval_hours: float = Field(default=24.0, gt=0)
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_postgres_url(cls, value: str) -> str:
+        for prefix in ("postgres://", "postgresql://"):
+            if value.startswith(prefix):
+                return "postgresql+psycopg://" + value[len(prefix):]
+        return value
 
     @model_validator(mode="after")
     def reject_unsafe_production_configuration(self) -> Settings:

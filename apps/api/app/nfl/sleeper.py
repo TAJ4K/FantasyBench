@@ -77,9 +77,13 @@ class SleeperProvider:
                     gsis_id=_string(raw.get("gsis_id")),
                     external_ids=external,
                     metadata={
+                        "rank": raw.get("search_rank") or 10**9,
+                        "rank_source": "sleeper_search_rank",
+                        **{
                         key: raw[key]
                         for key in ("age", "years_exp", "depth_chart_position", "depth_chart_order")
                         if raw.get(key) is not None
+                        },
                     },
                 )
             )

@@ -98,3 +98,9 @@ The API test suite is deterministic and network-free. It covers 120 draft picks,
 - `LLM_PROVIDER=fake` makes local seasons deterministic and free. Paid OpenRouter runs require explicit hard budget controls.
 
 Read [the architecture](docs/ARCHITECTURE.md) for service boundaries and [the deployment runbook](docs/DEPLOYMENT.md) for production operations.
+
+## Heroku + Netlify
+
+The temporary production deployment uses a single Heroku Python web dyno and persistent
+Heroku PostgreSQL, with Netlify proxying the live API under `/backend`.
+See [the Heroku runbook](docs/HEROKU.md) for configuration, budgets and migration.

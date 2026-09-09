@@ -14,6 +14,7 @@ MODEL_PRICES_PER_MILLION: dict[str, tuple[Decimal, Decimal]] = {
     "z-ai/glm-5.3": (Decimal("1.4"), Decimal("4.4")),
     "deepseek/deepseek-v4-pro": (Decimal("2"), Decimal("5")),
     "qwen/qwen3.8-max": (Decimal("2"), Decimal("6")),
+    "qwen/qwen3.8-max-0902": (Decimal("2"), Decimal("6")),
     "x-ai/grok-4.6": (Decimal("2.2"), Decimal("6.6")),
     "google/gemini-3.7-flash": (Decimal("1.5"), Decimal("7.5")),
     "moonshotai/kimi-k3": (Decimal("3"), Decimal("15")),

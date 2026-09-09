@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-MANAGER_SYSTEM_VERSION = "manager_system_v1"
+MANAGER_SYSTEM_VERSION = "manager_system_v2"
 
 MANAGER_SYSTEM_PROMPT = """You manage exactly one fantasy football franchise. Act only in
 that franchise's competitive interest. Never collude, dump roster value, coordinate standings,
@@ -21,7 +21,7 @@ class Prompt:
 
 
 DECISION_VERSIONS = {
-    "draft": "draft_v1",
+    "draft": "draft_v2",
     "waiver": "waiver_v1",
     "lineup": "lineup_v1",
     "trade": "trade_v1",
@@ -42,5 +42,16 @@ def build_prompt(decision_type: str, context: dict[str, Any]) -> Prompt:
         "trade": "Evaluate or propose a legal trade solely for your franchise's benefit.",
         "memory": "Summarize durable strategy; do not include hidden reasoning or sensitive data.",
     }.get(kind, "Make the requested legal fantasy-football decision.")
-    payload = json.dumps(context, sort_keys=True, separators=(",", ":"), default=str)
-    return Prompt(version, MANAGER_SYSTEM_PROMPT, f"{instructions}\nContext JSON:\n{payload}")
+    dynamic = dict(context)
+    catalog = dynamic.pop("player_catalog", None)
+    system = MANAGER_SYSTEM_PROMPT
+    if catalog is not None:
+        system += (
+            "\nLeague: eight teams, full PPR (one point per reception), 15-round snake draft. "
+            "Use the current available_players list for legal selections. The reference catalog "
+            "is stable across picks and includes already drafted players. Ranks are Sleeper "
+            "search ranks, not expert projections or ADP. Evaluate position and roster needs.\n"
+            + json.dumps(catalog, sort_keys=True, separators=(",", ":"), default=str)
+        )
+    payload = json.dumps(dynamic, sort_keys=True, separators=(",", ":"), default=str)
+    return Prompt(version, system, f"{instructions}\nContext JSON:\n{payload}")

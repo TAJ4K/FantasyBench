@@ -1,0 +1,9 @@
+/apps/web
+/node_modules
+/.artifacts
+/*.db
+/.env
+/.pytest_cache
+/.mypy_cache
+/.ruff_cache
+/apps/api/tests
