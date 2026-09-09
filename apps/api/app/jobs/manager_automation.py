@@ -480,7 +480,16 @@ class ManagerAutomation:
             result = await self._invoke_trade(db, request)
             decision = TradeResponseDecision.model_validate(result.parsed)
             if decision.offer_id != offer_id:
-                raise ValueError("trade response refers to a different offer")
+                if validation_error is not None:
+                    raise ValueError("trade response refers to a different offer")
+                return await self._respond_to_trade(
+                    league_id,
+                    offer_id,
+                    validation_error=(
+                        f"WRONG_OFFER_ID: Your response used {decision.offer_id!r}. "
+                        f"Return offer_id exactly {offer_id!r} for the current offer."
+                    ),
+                )
         try:
             with self.session_factory() as db:
                 if decision.action == "accept":
@@ -610,10 +619,20 @@ class ManagerAutomation:
             return await self._invocation(db).invoke(request)
         except LLMResponseError as exc:
             choices = exc.raw_response.get("choices") or [{}]
-            if choices[0].get("finish_reason") != "length":
-                raise
             # A fresh invocation preserves usage auditing and budget checks for both calls.
-            retry = replace(request, max_tokens=min(32768, (request.max_tokens or 8192) * 2))
+            retry = replace(
+                request,
+                max_tokens=(
+                    min(32768, (request.max_tokens or 8192) * 2)
+                    if choices[0].get("finish_reason") == "length"
+                    else request.max_tokens
+                ),
+                user_prompt=request.user_prompt
+                + (
+                    "\nYour previous response was invalid or incomplete JSON. Return exactly one "
+                    "complete JSON object matching the schema, without markdown or trailing text."
+                ),
+            )
             return await self._invocation(db).invoke(retry)
 
     def _record_memory(

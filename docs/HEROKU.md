@@ -47,12 +47,16 @@ Public LLM usage exposes `cached_input_tokens`; provider raw usage remains audit
 including malformed paid responses. Overview polling omits bulky decision context
 snapshots and excludes unfinished requests from the error count.
 
-Trade decisions use `TRADE_MAX_TOKENS` (8,192 by default) and retry a truncated
-response once with twice the allowance, capped at 32,768. Each attempt passes
+Trade decisions use `TRADE_MAX_TOKENS` (8,192 by default) and retry an invalid
+structured response once. Truncation doubles the allowance, capped at 32,768;
+other formatting errors keep the same allowance. Each attempt passes
 the existing spending checks and is recorded separately. Daily trade reviews
 follow new proposals and counteroffers through the negotiation limit in the same
 run. Accepted starter trades restore legal lineups atomically, preserving kickoff
 locks; trades that cannot leave a legal lineup still fail validation.
+Models receive roster capacity and one correction opportunity when an action
+fails trade validation or uses the wrong offer ID. A repeated invalid action is
+reported as a failure; the system does not invent a manager's decision.
 
 ## Operations and migration to the Linux host
 

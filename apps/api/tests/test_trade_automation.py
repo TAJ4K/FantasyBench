@@ -18,8 +18,13 @@ from app.services.trades import propose_trade
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("corrects_decision", [True, False])
+@pytest.mark.parametrize("wrong_id", [True, False])
 async def test_roster_limit_feedback_is_bounded_and_preserves_ownership(
-    engine: Engine, db: Session, monkeypatch: pytest.MonkeyPatch, corrects_decision: bool
+    engine: Engine,
+    db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    corrects_decision: bool,
+    wrong_id: bool,
 ) -> None:
     league = initialize_league(db, nfl_season=2026)
     league.roster_config = {"starters": {"RB": 1}, "bench": 1, "ir": 1}
@@ -60,7 +65,9 @@ async def test_roster_limit_feedback_is_bounded_and_preserves_ownership(
                     action="reject"
                     if context["validation_error"] and corrects_decision
                     else "accept",
-                    offer_id=offer.id,
+                    offer_id="wrong"
+                    if wrong_id and not (context["validation_error"] and corrects_decision)
+                    else offer.id,
                     message="Decision",
                     public_reasoning="Roster constraints",
                 ),
@@ -74,11 +81,13 @@ async def test_roster_limit_feedback_is_bounded_and_preserves_ownership(
     if corrects_decision:
         assert await automation._respond_to_trade(league.id, offer.id) == "REJECT"
     else:
-        with pytest.raises(ConflictError, match="roster limit"):
+        with pytest.raises(ValueError if wrong_id else ConflictError):
             await automation._respond_to_trade(league.id, offer.id)
     assert len(contexts) == 2
     assert contexts[0]["validation_error"] is None
-    assert "TRADE_ROSTER_FULL" in contexts[1]["validation_error"]
+    assert ("WRONG_OFFER_ID" if wrong_id else "TRADE_ROSTER_FULL") in contexts[1][
+        "validation_error"
+    ]
     assert contexts[1]["roster_config"]["bench"] == 1
     db.expire_all()
     assert [row.team_id for row in rows] == original_owners
@@ -158,8 +167,9 @@ async def test_new_proposal_and_counters_are_answered_in_same_review(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("budget", [None, 0.001])
+@pytest.mark.parametrize("finish_reason", ["length", "stop"])
 async def test_truncated_trade_retry_is_audited_and_budget_checked(
-    engine: Engine, db: Session, budget: float | None
+    engine: Engine, db: Session, budget: float | None, finish_reason: str
 ) -> None:
     league = initialize_league(db, nfl_season=2026)
     team = league.teams[0]
@@ -173,7 +183,7 @@ async def test_truncated_trade_retry_is_audited_and_budget_checked(
         LLMResponseError(
             "truncated",
             raw_response={
-                "choices": [{"finish_reason": "length"}],
+                "choices": [{"finish_reason": finish_reason}],
                 "usage": {"completion_tokens": 8192, "cost": 0.001},
             },
         ),
@@ -205,7 +215,7 @@ async def test_truncated_trade_retry_is_audited_and_budget_checked(
         assert result.parsed == decision
         assert [call.args[0].max_tokens for call in provider.decide.await_args_list] == [
             8192,
-            16384,
+            16384 if finish_reason == "length" else 8192,
         ]
     runs = list(db.scalars(select(LLMRun).order_by(LLMRun.started_at)))
     assert len(runs) == 2
