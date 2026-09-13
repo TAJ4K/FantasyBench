@@ -49,8 +49,9 @@ function RosterRow({ slot, assignment, score, loading }: { slot: string; assignm
       </div>
       <span className="roster-player-meta">{player ? `${player.position} · ${player.nfl_team || 'FA'}` : 'Awaiting assignment'}</span>
     </div>
-    <span className="roster-points" aria-label={`Average fantasy points: ${score?.average.toFixed(1) ?? (loading && player ? 'loading' : 'unavailable')}`}>{score?.average.toFixed(1) ?? (loading && player ? '…' : '—')}</span>
+    <span className="roster-points" aria-label={`Average fantasy points: ${score?.average?.toFixed(1) ?? (loading && player ? 'loading' : 'unavailable')}`}>{score?.average?.toFixed(1) ?? (loading && player ? '…' : '—')}</span>
     <span className="roster-points" aria-label={`Last week fantasy points: ${score?.lastWeek?.toFixed(1) ?? (loading && player ? 'loading' : 'unavailable')}`}>{score?.lastWeek?.toFixed(1) ?? (loading && player ? '…' : '—')}</span>
+    <span className="roster-points" aria-label={`This week fantasy points: ${score?.thisWeek?.toFixed(1) ?? (loading && player ? 'loading' : 'unavailable')}`}>{score?.thisWeek?.toFixed(1) ?? (loading && player ? '…' : '—')}</span>
   </li>;
 }
 
@@ -60,7 +61,7 @@ export default function TeamRoster({ roster, api, leagueId, season, currentWeek 
   const bench = roster.filter(row => row.slot_type === 'BENCH');
   const reserve = roster.filter(row => row.slot_type === 'IR');
   const extraStarters = starters.filter(row => !startingSlots.includes(row.position_slot || ''));
-  const scoreHeadings = <><span className="roster-score-heading" title="Average fantasy points per recorded week this season, excluding the current week">AVG</span><span className="roster-score-heading" title={currentWeek > 1 ? `Fantasy points in week ${currentWeek - 1}` : 'No previous week this season'}>LAST WK</span></>;
+  const scoreHeadings = <><span className="roster-score-heading" title="Average fantasy points per recorded week this season, excluding the current week">AVG</span><span className="roster-score-heading" title={currentWeek > 1 ? `Fantasy points in week ${currentWeek - 1}` : 'No previous week this season'}>LAST WK</span><span className="roster-score-heading" title={`Fantasy points in week ${currentWeek}`}>THIS WK</span></>;
   return <div className="fantasy-roster">
     <section className="roster-group" aria-label="Starting lineup">
       <div className="roster-group-heading"><h4>Starters <span>{starters.length} / {startingSlots.length}</span></h4>{scoreHeadings}</div>
