@@ -21,6 +21,11 @@ scores and use the scheduler's normal retries. Once all NFL games are final and
 nflverse publishes a complete week, nflverse replaces the provisional stats and the
 service settles matchups. Partial final publications do not overwrite live scores.
 
+The five-minute schedule sync also reads ESPN's public scoreboard for explicit game
+states. Roster LIVE badges mean the player's NFL game is underway, including halftime;
+they do not imply that the player is on the field. Finished, delayed, postponed, and
+suspended games have no badge. Status checks older than ten minutes are hidden.
+
 ## Production configuration
 
 Set `APP_ENV=production`, `LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, a random

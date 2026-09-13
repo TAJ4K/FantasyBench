@@ -89,6 +89,9 @@ body { line-height: 1.5; }
 .roster-player-name-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .roster-player-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1rem; font-weight: 700; line-height: 1.4; }
 .roster-player-meta { font-size: .8125rem; color: #b9bbad; line-height: 1.4; }
+.roster-player-meta-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
+.roster-game-live { display: inline-flex; align-items: center; gap: 5px; padding: 1px 5px; border: 1px solid #556b31; border-radius: 3px; color: var(--acid); background: #2b351d; font-size: .625rem; font-weight: 700; line-height: 1.4; letter-spacing: .05em; white-space: nowrap; }
+.roster-game-live i { width: 5px; height: 5px; background: currentColor; border-radius: 50%; }
 .roster-injury { flex: 0 0 auto; display: inline-block; white-space: nowrap; padding: 2px 7px; background: #412d25; color: #ffc2a7; border: 1px solid #735042; border-radius: 3px; font-size: .75rem; }
 .roster-row-empty .roster-player-name { font-weight: 400; color: #b9bbad; }
 .roster-group-empty { margin: 0; padding: 24px; font-size: .875rem; color: #b9bbad; background: #191c17; }

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query
@@ -25,6 +25,7 @@ from app.models.entities import (
     WaiverClaim,
     WaiverPeriod,
 )
+from app.nfl.game_status import normalize_team
 from app.services.competition import standings
 
 router = APIRouter(prefix="/api/v1", tags=["spectator"])
@@ -346,10 +347,34 @@ def get_spectator_overview(
             RosterAssignment.position_slot,
         )
     ).all()
+    live_games: dict[str, dict[str, str]] = {}
+    now = datetime.now(UTC)
+    for game in db.scalars(select(NflGame).where(
+        NflGame.season == league.nfl_season,
+        NflGame.week == league.current_week,
+        NflGame.status == "LIVE",
+    )):
+        status = (game.payload or {}).get("game_status") or {}
+        try:
+            checked_at = _as_utc(datetime.fromisoformat(status["checked_at"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        # Hide live indicators if their upstream status has gone stale.
+        if not timedelta(0) <= now - checked_at <= timedelta(minutes=10):
+            continue
+        live_game = {
+            "home_team": game.home_team, "away_team": game.away_team,
+            "detail": str(status.get("detail") or "In progress"),
+        }
+        for nfl_team in (game.home_team, game.away_team):
+            live_games[normalize_team(nfl_team)] = live_game
     rosters: dict[str, list[dict[str, Any]]] = {team.id: [] for team in teams}
     for assignment in roster_rows:
         rosters[assignment.team_id].append(
-            serialize(assignment) | {"player": serialize(assignment.player)}
+            serialize(assignment) | {
+                "player": serialize(assignment.player),
+                "live_game": live_games.get(normalize_team(assignment.player.nfl_team or "")),
+            }
         )
 
     team_payload = [

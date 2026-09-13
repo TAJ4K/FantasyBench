@@ -18,6 +18,7 @@ export type RosterAssignment = {
   position_slot: string | null;
   slot_type: string;
   player: RosterPlayer;
+  live_game?: { home_team: string; away_team: string; detail: string } | null;
 };
 
 const startingSlots = ['QB', 'RB1', 'RB2', 'WR1', 'WR2', 'TE', 'FLEX', 'K', 'DST'];
@@ -36,8 +37,10 @@ function PlayerPortrait({ player }: { player?: RosterPlayer }) {
   </span>;
 }
 
-function RosterRow({ slot, assignment, score, loading }: { slot: string; assignment?: RosterAssignment; score?: RosterScore; loading: boolean }) {
+function RosterRow({ slot, assignment, score, loading, showLiveStatus }: { slot: string; assignment?: RosterAssignment; score?: RosterScore; loading: boolean; showLiveStatus: boolean }) {
   const player = assignment?.player;
+  const liveGame = showLiveStatus ? assignment?.live_game : null;
+  const liveDescription = liveGame ? `${liveGame.away_team} at ${liveGame.home_team} · ${liveGame.detail}` : '';
   const position = positionLabel(slot);
   return <li className={`roster-row${player ? '' : ' roster-row-empty'}`}>
     <span className="roster-slot" data-position={position} aria-label={`${slot} slot`}>{position}</span>
@@ -47,7 +50,10 @@ function RosterRow({ slot, assignment, score, loading }: { slot: string; assignm
         <span className="roster-player-name" title={player?.full_name}>{player?.full_name || 'Empty slot'}</span>
         {player?.injury_status && <span className="roster-injury">{player.injury_status}</span>}
       </div>
-      <span className="roster-player-meta">{player ? `${player.position} · ${player.nfl_team || 'FA'}` : 'Awaiting assignment'}</span>
+      <div className="roster-player-meta-line">
+        <span className="roster-player-meta">{player ? `${player.position} · ${player.nfl_team || 'FA'}` : 'Awaiting assignment'}</span>
+        {liveGame && <span className="roster-game-live" title={liveDescription} aria-label={`NFL game in progress: ${liveDescription}`}><i aria-hidden="true" />LIVE</span>}
+      </div>
     </div>
     <span className="roster-points" aria-label={`Average fantasy points: ${score?.average?.toFixed(1) ?? (loading && player ? 'loading' : 'unavailable')}`}>{score?.average?.toFixed(1) ?? (loading && player ? '…' : '—')}</span>
     <span className="roster-points" aria-label={`Last week fantasy points: ${score?.lastWeek?.toFixed(1) ?? (loading && player ? 'loading' : 'unavailable')}`}>{score?.lastWeek?.toFixed(1) ?? (loading && player ? '…' : '—')}</span>
@@ -55,7 +61,7 @@ function RosterRow({ slot, assignment, score, loading }: { slot: string; assignm
   </li>;
 }
 
-export default function TeamRoster({ roster, api, leagueId, season, currentWeek }: { roster: RosterAssignment[]; api: string; leagueId: string; season: number; currentWeek: number }) {
+export default function TeamRoster({ roster, api, leagueId, season, currentWeek, showLiveStatus = true }: { roster: RosterAssignment[]; api: string; leagueId: string; season: number; currentWeek: number; showLiveStatus?: boolean }) {
   const { scores, loading, error } = useRosterScores(api, leagueId, season, currentWeek);
   const starters = roster.filter(row => row.slot_type === 'STARTER');
   const bench = roster.filter(row => row.slot_type === 'BENCH');
@@ -66,18 +72,18 @@ export default function TeamRoster({ roster, api, leagueId, season, currentWeek 
     <section className="roster-group" aria-label="Starting lineup">
       <div className="roster-group-heading"><h4>Starters <span>{starters.length} / {startingSlots.length}</span></h4>{scoreHeadings}</div>
       <ol className="roster-list">
-        {startingSlots.map(slot => { const row = starters.find(row => row.position_slot === slot); return <RosterRow key={slot} slot={slot} assignment={row} score={row && scores[row.player.id]} loading={loading} />; })}
-        {extraStarters.map(row => <RosterRow key={row.id} slot={row.position_slot || row.player.position} assignment={row} score={scores[row.player.id]} loading={loading} />)}
+        {startingSlots.map(slot => { const row = starters.find(row => row.position_slot === slot); return <RosterRow key={slot} slot={slot} assignment={row} score={row && scores[row.player.id]} loading={loading} showLiveStatus={showLiveStatus} />; })}
+        {extraStarters.map(row => <RosterRow key={row.id} slot={row.position_slot || row.player.position} assignment={row} score={scores[row.player.id]} loading={loading} showLiveStatus={showLiveStatus} />)}
       </ol>
     </section>
     <section className="roster-group" aria-label="Bench">
       <div className="roster-group-heading"><h4>Bench <span>{bench.length} players</span></h4>{scoreHeadings}</div>
-      {bench.length ? <ol className="roster-list">{bench.map(row => <RosterRow key={row.id} slot="BN" assignment={row} score={scores[row.player.id]} loading={loading} />)}</ol> : <p className="roster-group-empty">No players on the bench.</p>}
+      {bench.length ? <ol className="roster-list">{bench.map(row => <RosterRow key={row.id} slot="BN" assignment={row} score={scores[row.player.id]} loading={loading} showLiveStatus={showLiveStatus} />)}</ol> : <p className="roster-group-empty">No players on the bench.</p>}
     </section>
     {reserve.length > 0 && <section className="roster-group" aria-label="Injured reserve">
       <div className="roster-group-heading"><h4>Injured reserve <span>{reserve.length} players</span></h4>{scoreHeadings}</div>
-      <ol className="roster-list">{reserve.map(row => <RosterRow key={row.id} slot="IR" assignment={row} score={scores[row.player.id]} loading={loading} />)}</ol>
+      <ol className="roster-list">{reserve.map(row => <RosterRow key={row.id} slot="IR" assignment={row} score={scores[row.player.id]} loading={loading} showLiveStatus={showLiveStatus} />)}</ol>
     </section>}
-    <p className="roster-score-note">{error ? 'Scores temporarily unavailable; any displayed scores are from the last successful update. ' : ''}Average uses recorded weeks in {season}, excluding the current week. — means no recorded score.</p>
+    <p className="roster-score-note">{error ? 'Scores temporarily unavailable; any displayed scores are from the last successful update. ' : ''}Average uses recorded weeks in {season}, excluding the current week. — means no recorded score. LIVE means the player’s NFL game is in progress.</p>
   </div>;
 }

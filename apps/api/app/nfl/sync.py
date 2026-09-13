@@ -34,6 +34,9 @@ class NFLDataSyncService:
 
     async def sync_schedule(self, season: int) -> SyncResult:
         records = await self.provider.get_schedule(season)
+        return self.sync_game_records(records)
+
+    def sync_game_records(self, records: list[NFLGameRecord]) -> SyncResult:
         return self._transaction(lambda: self._upsert_schedule(records))
 
     def sync_player_identities(self, identities: dict[str, str]) -> SyncResult:

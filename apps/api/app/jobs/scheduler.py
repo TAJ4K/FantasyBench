@@ -25,6 +25,7 @@ from app.models.entities import (
 )
 from app.nfl import NFLDataSyncService, NflverseProvider, SleeperProvider
 from app.nfl.contracts import NFLDataProvider, NFLStatRecord
+from app.nfl.game_status import EspnGameStatusProvider
 from app.nfl.sleeper_stats import SleeperStatsProvider
 from app.services.competition import calculate_matchup, complete_matchup
 from app.services.events import emit_event
@@ -576,10 +577,23 @@ class LeagueScheduler:
             if league is None:
                 raise ValueError("league does not exist")
             season = league.nfl_season
+            week = league.current_week
         provider = NflverseProvider()
         try:
+            records = await provider.get_schedule(season)
+            status_provider = EspnGameStatusProvider()
+            try:
+                current_games = await status_provider.update_games([
+                    game for game in records if game.week == week
+                ])
+                current_by_id = {game.provider_id: game for game in current_games}
+                records = [current_by_id.get(game.provider_id, game) for game in records]
+            except (httpx.HTTPError, ValueError, KeyError, TypeError):
+                logger.warning("live_game_status_unavailable", exc_info=True)
+            finally:
+                await status_provider.aclose()
             with self.session_factory() as db:
-                result = await NFLDataSyncService(db, provider).sync_schedule(season)
+                result = NFLDataSyncService(db, provider).sync_game_records(records)
             return {
                 "inserted": str(result.inserted),
                 "updated": str(result.updated),
