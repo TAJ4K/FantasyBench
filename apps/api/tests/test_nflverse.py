@@ -200,6 +200,7 @@ async def test_scheduler_does_not_finalize_partial_stats(engine, monkeypatch) ->
             pass
 
     monkeypatch.setattr("app.jobs.scheduler.NflverseProvider", PartialProvider)
+    monkeypatch.setattr("app.jobs.scheduler.SleeperStatsProvider", PartialProvider)
     factory = sessionmaker(engine, expire_on_commit=False)
     with factory() as db:
         league = initialize_league(db, nfl_season=2026)

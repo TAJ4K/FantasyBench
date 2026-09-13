@@ -14,6 +14,13 @@ in Heroku config vars, never in Netlify public variables or source control.
 The terminal, draft board and calendar refresh every five seconds, retain their last
 successful response during outages, and never substitute sample league results.
 
+Scoring runs every five minutes during the active fantasy week. Sleeper's public
+stats feed supplies provisional player, kicker, and defense statistics, scored with
+the league's rules. This endpoint is undocumented; outages retain the last successful
+scores and use the scheduler's normal retries. Once all NFL games are final and
+nflverse publishes a complete week, nflverse replaces the provisional stats and the
+service settles matchups. Partial final publications do not overwrite live scores.
+
 ## Production configuration
 
 Set `APP_ENV=production`, `LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, a random

@@ -5,6 +5,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -23,6 +24,8 @@ from app.models.entities import (
     WaiverPeriod,
 )
 from app.nfl import NFLDataSyncService, NflverseProvider, SleeperProvider
+from app.nfl.contracts import NFLDataProvider, NFLStatRecord
+from app.nfl.sleeper_stats import SleeperStatsProvider
 from app.services.competition import calculate_matchup, complete_matchup
 from app.services.events import emit_event
 from app.services.playoffs import advance_playoffs, seed_playoffs
@@ -289,7 +292,7 @@ class LeagueScheduler:
                                 injury_job.attempt_count,
                             )
                         )
-                    stats_bucket = int(now.timestamp() // 3600)
+                    stats_bucket = int(now.timestamp() // 300)
                     stats_job = self._claim_job(
                         db,
                         "nfl_stats_scoring",
@@ -633,23 +636,58 @@ class LeagueScheduler:
             if league is None:
                 raise ValueError("league does not exist")
             season = league.nfl_season
-        provider = NflverseProvider()
-        try:
-            identities = await provider.get_player_identities()
+            if league.current_week != week or league.locked:
+                return {"status": "inactive_week", "week_completed": "false"}
+            games = list(db.scalars(select(NflGame).where(
+                NflGame.season == season, NflGame.week == week,
+            )))
+            all_final = bool(games) and all(game.status == "FINAL" for game in games)
+
+        provider: NFLDataProvider
+        records: list[NFLStatRecord] = []
+        final_stats = False
+        identities: dict[str, str] = {}
+        if all_final:
+            final_provider = NflverseProvider()
+            try:
+                records = await final_provider.get_week_stats(season, week)
+                final_stats = final_provider.stats_available and final_provider.week_stats_complete
+                if final_stats:
+                    identities = await final_provider.get_player_identities()
+                    provider = final_provider
+            except (httpx.HTTPError, ValueError):
+                # Keep live scoring available if final publication is delayed or unavailable.
+                logger.warning("final_stats_unavailable", exc_info=True)
+                final_stats = False
+            finally:
+                await final_provider.aclose()
+        if not final_stats:
+            live_provider = SleeperStatsProvider()
+            try:
+                records = await live_provider.get_week_stats(season, week)
+                provider = live_provider
+            finally:
+                await live_provider.aclose()
+        if not records:
+            return {"status": "awaiting_stats_publication", "week_completed": "false"}
+        if identities:
             with self.session_factory() as db:
-                service = NFLDataSyncService(db, provider)
-                service.sync_player_identities(identities)
-                result = await service.sync_week_stats(season, week)
-            if not provider.stats_available:
-                return {"status": "awaiting_stats_publication", "week_completed": "false"}
-        finally:
-            await provider.aclose()
+                NFLDataSyncService(db, provider).sync_player_identities(identities)
 
         completed = False
         with self.session_factory() as db:
             league = db.scalar(select(League).where(League.id == league_id).with_for_update())
             if league is None:
                 raise ValueError("league does not exist")
+            matchups = list(db.scalars(select(Matchup).where(
+                Matchup.league_id == league_id, Matchup.week == week,
+            )))
+            if (
+                league.current_week != week or league.locked
+                or (matchups and all(matchup.status == "COMPLETE" for matchup in matchups))
+            ):
+                return {"status": "inactive_week", "week_completed": "false"}
+            result = NFLDataSyncService(db, provider).sync_stat_records(records, commit=False)
             stats = list(
                 db.scalars(
                     select(PlayerWeekStat).where(
@@ -674,7 +712,8 @@ class LeagueScheduler:
                 )
             )
             for matchup in matchups:
-                calculate_matchup(db, matchup_id=matchup.id, season=season)
+                if matchup.status != "COMPLETE":
+                    calculate_matchup(db, matchup_id=matchup.id, season=season)
             games = list(
                 db.scalars(select(NflGame).where(NflGame.season == season, NflGame.week == week))
             )
@@ -682,7 +721,7 @@ class LeagueScheduler:
             already_complete = bool(matchups) and all(
                 matchup.status == "COMPLETE" for matchup in matchups
             )
-            if all_final and provider.week_stats_complete and matchups and not already_complete:
+            if all_final and final_stats and matchups and not already_complete:
                 for matchup in matchups:
                     complete_matchup(db, matchup_id=matchup.id, season=season)
                 emit_event(db, league_id, "WEEK_COMPLETED", data={"week": week})
@@ -693,6 +732,7 @@ class LeagueScheduler:
             "inserted": str(result.inserted),
             "updated": str(result.updated),
             "week_completed": str(completed).lower(),
+            "source": provider.name,
         }
 
     @staticmethod

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -62,6 +63,16 @@ class NFLDataSyncService:
 
     async def sync_week_stats(self, season: int, week: int) -> SyncResult:
         records = await self.provider.get_week_stats(season, week)
+        return self.sync_stat_records(records)
+
+    def sync_stat_records(
+        self, records: list[NFLStatRecord], *, commit: bool = True
+    ) -> SyncResult:
+        """Apply an already validated snapshot, optionally in the caller's transaction."""
+        if not commit:
+            result = self._upsert_stats(records)
+            self.session.flush()
+            return result
         return self._transaction(lambda: self._upsert_stats(records))
 
     async def sync_injuries(self, season: int, week: int) -> SyncResult:
@@ -210,6 +221,17 @@ class NFLDataSyncService:
                 indexed[key] = stat
                 inserted += 1
             else:
+                previous_update = stat.source_updated_at
+                if previous_update is not None and previous_update.tzinfo is None:
+                    previous_update = previous_update.replace(tzinfo=UTC)
+                if (
+                    stat.provider == self.provider.name
+                    and previous_update is not None
+                    and record.updated_at is not None
+                    and record.updated_at < previous_update
+                ):
+                    skipped += 1
+                    continue
                 updated += 1
             stat.provider = self.provider.name
             stat.raw_stats = record.stats
