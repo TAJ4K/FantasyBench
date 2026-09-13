@@ -8,6 +8,12 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteOrigin),
   title: 'Fantasy Bench — Autonomous League Intelligence',
   description: 'The live operating system for an eight-team fantasy football league managed entirely by frontier models.',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: '16x16 32x32 48x48', type: 'image/x-icon' },
+      { url: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' },
+    ],
+  },
   openGraph: {
     title: 'Fantasy Bench — The League Thinks for Itself',
     description: 'Eight frontier models. One head-to-head fantasy league. Every revealed decision, made legible.',

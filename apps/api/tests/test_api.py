@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
-from app.models.entities import League, LLMRun, NflGame, TradeThread, WaiverPeriod
+from app.models.entities import League, LLMRun, Matchup, NflGame, Team, TradeThread, WaiverPeriod
 from app.schemas.api import LeagueInitializeRequest
 
 
@@ -210,6 +211,60 @@ def test_overview_points_per_dollar_tracks_live_points_and_spend(
     team = next(item for item in overview["teams"] if item["points_for"] == 250.0)
     assert team["usage"]["points_per_dollar"] == 100.0
     assert overview["metrics"]["llm_usage"]["points_per_dollar"] == 100.0
+
+
+@pytest.mark.parametrize("status", ["SCHEDULED", "LIVE", "COMPLETE"])
+def test_overview_includes_ongoing_points_without_double_counting(
+    app_client: TestClient, admin_headers: dict[str, str], engine: Engine, status: str
+) -> None:
+    app_client.post("/api/v1/admin/initialize", json={"nfl_season": 2026}, headers=admin_headers)
+    with Session(engine) as db:
+        league = db.scalar(select(League))
+        assert league is not None
+        league.current_week = 2
+        home, away = league.teams[:2]
+        home_id, away_id = home.id, away.id
+        home.points_for = 125.5 if status == "COMPLETE" else 100.0
+        away.points_for = -2.0 if status == "COMPLETE" else 0.0
+        for week, matchup_status, home_score, away_score in (
+            (1, "COMPLETE", 100.0, 0.0),
+            (2, status, 25.5, -2.0),
+            (3, "SCHEDULED", 999.0, 999.0),
+        ):
+            matchup = db.scalar(select(Matchup).where(
+                Matchup.league_id == league.id, Matchup.week == week,
+                Matchup.matchup_number == 1,
+            ))
+            assert matchup is not None
+            matchup.home_team_id = home_id
+            matchup.away_team_id = away_id
+            matchup.status = matchup_status
+            matchup.home_score = home_score
+            matchup.away_score = away_score
+        db.add(LLMRun(
+            league_id=league.id, team_id=home_id, model=home.model_identifier,
+            decision_type="LINEUP", prompt_version="test", cost_usd=2.0, success=True,
+        ))
+        db.commit()
+
+    for _ in range(2):
+        response = app_client.get("/api/v1/overview")
+        assert response.status_code == 200, response.text
+        overview = response.json()
+        teams = {team["id"]: team for team in overview["teams"]}
+        assert teams[home_id]["standing"]["points_for"] == 125.5
+        assert teams[home_id]["standing"]["rank"] == 1
+        assert teams[away_id]["standing"]["points_for"] == -2.0
+        assert teams[home_id]["usage"]["points_per_dollar"] == 62.75
+        assert teams[away_id]["usage"]["points_per_dollar"] is None
+        assert overview["metrics"]["league_points"] == 123.5
+        assert overview["metrics"]["llm_usage"]["points_per_dollar"] == 61.75
+
+    with Session(engine) as db:
+        home = db.get(Team, home_id)
+        assert home is not None
+        assert home.points_for == (125.5 if status == "COMPLETE" else 100.0)
+        assert home.wins == 0
 
 
 def test_overview_does_not_count_inflight_requests_as_errors(

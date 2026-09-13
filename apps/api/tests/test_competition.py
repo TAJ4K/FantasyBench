@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.base import Base
 from app.models.entities import LineupDecision, Player, PlayerFantasyScore, RosterAssignment
 from app.services.competition import (
+    calculate_matchup,
     complete_matchup,
     generate_round_robin_matchups,
     standings,
@@ -18,6 +19,7 @@ def test_lineup_scores_complete_matchup_and_update_standings_once() -> None:
     Base.metadata.create_all(engine)
     with Session(engine) as db:
         league = initialize_league(db, nfl_season=2026, settings={"regular_season_weeks": 1})
+        league.current_week = 1
         matchups = generate_round_robin_matchups(db, league_id=league.id, weeks=1)
         matchup = matchups[0]
         assert matchup.home_team_id and matchup.away_team_id
@@ -49,12 +51,19 @@ def test_lineup_scores_complete_matchup_and_update_standings_once() -> None:
                 )
             )
         db.flush()
+        calculate_matchup(db, matchup_id=matchup.id, season=2026)
+        live_table = standings(db, league_id=league.id, include_live=True)
+        assert live_table[0]["team_id"] == matchup.home_team_id
+        assert live_table[0]["points_for"] == 20.5
+        assert live_table[0]["wins"] == 0
+        assert all(row["points_for"] == 0 for row in standings(db, league_id=league.id))
         complete_matchup(db, matchup_id=matchup.id, season=2026)
         complete_matchup(db, matchup_id=matchup.id, season=2026)
         table = standings(db, league_id=league.id)
         assert matchup.home_score == 20.5
         assert table[0]["team_id"] == matchup.home_team_id
         assert table[0]["wins"] == 1
+        assert standings(db, league_id=league.id, include_live=True) == table
 
 
 def test_stale_lineup_decision_does_not_score_a_departed_player() -> None:

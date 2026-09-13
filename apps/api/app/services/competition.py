@@ -239,9 +239,30 @@ def complete_matchup(db: Session, *, matchup_id: str, season: int) -> Matchup:
     return matchup
 
 
-def standings(db: Session, *, league_id: str) -> list[dict[str, Any]]:
+def standings(
+    db: Session, *, league_id: str, include_live: bool = False
+) -> list[dict[str, Any]]:
+    """Optionally include ongoing scores for spectators without changing settled results."""
     teams = list(db.scalars(select(Team).where(Team.league_id == league_id)))
     league = db.get(League, league_id)
+    points_for = {team.id: team.points_for for team in teams}
+    points_against = {team.id: team.points_against for team in teams}
+    if include_live and league is not None:
+        ongoing = db.scalars(
+            select(Matchup).where(
+                Matchup.league_id == league_id,
+                Matchup.week <= league.current_week,
+                Matchup.status.in_(["SCHEDULED", "LIVE"]),
+            )
+        )
+        for matchup in ongoing:
+            for team_id, scored, conceded in (
+                (matchup.home_team_id, matchup.home_score, matchup.away_score),
+                (matchup.away_team_id, matchup.away_score, matchup.home_score),
+            ):
+                if team_id is not None and team_id in points_for:
+                    points_for[team_id] += scored
+                    points_against[team_id] += conceded
     tiebreakers = list(
         (league.settings if league else {}).get(
             "standings_tiebreakers", ["WIN_PERCENTAGE", "POINTS_FOR"]
@@ -266,9 +287,9 @@ def standings(db: Session, *, league_id: str) -> list[dict[str, Any]]:
             if normalized == "WIN_PERCENTAGE":
                 difference = percentage(second) - percentage(first)
             elif normalized == "POINTS_FOR":
-                difference = second.points_for - first.points_for
+                difference = points_for[second.id] - points_for[first.id]
             elif normalized == "POINTS_AGAINST":
-                difference = first.points_against - second.points_against
+                difference = points_against[first.id] - points_against[second.id]
             elif normalized == "HEAD_TO_HEAD":
                 first_wins = sum(
                     matchup.winner_team_id == first.id
@@ -302,8 +323,8 @@ def standings(db: Session, *, league_id: str) -> list[dict[str, Any]]:
             "losses": team.losses,
             "ties": team.ties,
             "win_percentage": round(percentage(team), 4),
-            "points_for": round(team.points_for, 4),
-            "points_against": round(team.points_against, 4),
+            "points_for": round(points_for[team.id], 4),
+            "points_against": round(points_against[team.id], 4),
             "streak": team.streak,
             "waiver_priority": team.waiver_priority,
             "playoff_position": rank if rank <= playoff_count else None,

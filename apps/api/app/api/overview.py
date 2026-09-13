@@ -310,7 +310,7 @@ def get_spectator_overview(
         db.scalars(select(Team).where(Team.league_id == league.id).order_by(Team.draft_position))
     )
     team_by_id = {team.id: team for team in teams}
-    table = standings(db, league_id=league.id)
+    table = standings(db, league_id=league.id, include_live=True)
     standing_by_team = {row["team_id"]: row for row in table}
     usage_by_team = _team_usage(db, league.id)
     recent_form = _recent_form(db, league.id)
@@ -415,7 +415,7 @@ def get_spectator_overview(
         if total_usage["requests"]
         else None
     )
-    league_points = round(sum(team.points_for for team in teams), 4)
+    league_points = round(sum(row["points_for"] for row in table), 4)
     total_usage["points_per_dollar"] = (
         round(league_points / total_usage["cost_usd"], 2) if total_usage["cost_usd"] > 0 else None
     )
