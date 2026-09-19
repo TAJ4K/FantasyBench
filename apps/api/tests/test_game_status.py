@@ -68,6 +68,42 @@ async def test_scoreboard_does_not_infer_live_from_kickoff_or_match_another_week
 
 
 @pytest.mark.asyncio
+async def test_scoreboard_selects_regular_season_week_instead_of_rejected_date_range():
+    game = NFLGameRecord(
+        "2026_02_DET_BUF", 2026, 2, datetime(2026, 9, 18, 0, 15, tzinfo=UTC), "BUF", "DET",
+    )
+
+    def handler(request):
+        assert dict(request.url.params) == {
+            "dates": "2026", "seasontype": "2", "week": "2", "limit": "100",
+        }
+        event = scoreboard_event("post", "STATUS_FINAL", True)
+        event["date"] = "2026-09-18T00:15Z"
+        event["competitions"][0]["competitors"][0]["team"]["abbreviation"] = "BUF"
+        event["competitions"][0]["competitors"][1]["team"]["abbreviation"] = "DET"
+        return httpx.Response(200, json={"events": [event]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result = await EspnGameStatusProvider(client=client).update_games([game])
+    assert result[0].status == "FINAL"
+    assert result[0].payload["game_status"]["source"] == "espn"
+
+
+@pytest.mark.asyncio
+async def test_scoreboard_rejects_mixed_weeks_before_requesting():
+    games = [NFLGameRecord(
+        f"week-{week}", 2026, week, datetime(2026, 9, 18, tzinfo=UTC), "BUF", "DET",
+    ) for week in (1, 2)]
+
+    def handler(request):
+        pytest.fail("Mixed weeks must not request an incomplete scoreboard")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(ValueError, match="single season and week"):
+            await EspnGameStatusProvider(client=client).update_games(games)
+
+
+@pytest.mark.asyncio
 async def test_schedule_sync_applies_status_and_clears_badges_on_feed_failure(engine, monkeypatch):
     factory = sessionmaker(engine, expire_on_commit=False)
     with factory() as db:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import httpx
 
@@ -26,11 +26,15 @@ class EspnGameStatusProvider:
     async def update_games(self, games: list[NFLGameRecord]) -> list[NFLGameRecord]:
         if not games:
             return []
-        first = min(game.kickoff_at for game in games) - timedelta(days=1)
-        last = max(game.kickoff_at for game in games) + timedelta(days=1)
+        weeks = {(game.season, game.week) for game in games}
+        if len(weeks) != 1:
+            raise ValueError("NFL scoreboard requires games from a single season and week")
+        season, week = next(iter(weeks))
         response = await self._client.get(
             "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
-            params={"dates": f"{first:%Y%m%d}-{last:%Y%m%d}", "limit": 1000},
+            # ESPN's NFL endpoint rejects date ranges. Select the regular-season
+            # week explicitly so both completed and upcoming games are returned.
+            params={"dates": str(season), "seasontype": 2, "week": week, "limit": 100},
         )
         response.raise_for_status()
         payload = response.json()

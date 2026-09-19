@@ -25,6 +25,8 @@ The five-minute schedule sync also reads ESPN's public scoreboard for explicit g
 states. Roster LIVE badges mean the player's NFL game is underway, including halftime;
 they do not imply that the player is on the field. Finished, delayed, postponed, and
 suspended games have no badge. Status checks older than ten minutes are hidden.
+The ESPN request selects the season, regular-season type, and week explicitly;
+the NFL scoreboard rejects date-range queries.
 
 ## Production configuration
 
@@ -39,6 +41,11 @@ $10 daily cap, $1.25 conservative single-request reservation, 2,400 output token
 after checking the actual key limit. The app pauses failed draft turns rather than
 silently substituting another model. Model calls made during operator preflight
 count toward the provider key cap but not the league's usage table.
+
+Budget checks reserve estimated costs while requests are in flight. Completed
+responses with a reported charge count their actual cost even when the decision
+fails validation. Failed requests without billing data retain their reservation.
+This accounting also applies to historical failures without modifying their audit records.
 
 ## Draft preparation
 

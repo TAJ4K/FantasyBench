@@ -165,9 +165,18 @@ def _decimal(value: float | str | Decimal | None) -> Decimal | None:
 
 def _budget_cost() -> Any:
     return case(
+        (LLMRun.completed_at.is_(None), LLMRun.estimated_cost_usd),
+        # A malformed decision can still have an authoritative provider charge.
+        # Release its unused reservation just as we do for a successful request,
+        # including an explicitly reported zero cost. This also reconciles old
+        # failures without rewriting their original estimates or audit records.
         (
-            (LLMRun.completed_at.is_(None)) | (LLMRun.success.is_(False)),
-            LLMRun.estimated_cost_usd,
+            LLMRun.success.is_(True)
+            | (LLMRun.cost_usd > 0)
+            | LLMRun.raw_response["usage"]["cost"].as_string().is_not(None),
+            LLMRun.cost_usd,
         ),
-        else_=LLMRun.cost_usd,
+        # Timeouts and responses without billing data remain conservatively
+        # reserved until their actual charge can be established.
+        else_=LLMRun.estimated_cost_usd,
     ).label("cost_usd")
