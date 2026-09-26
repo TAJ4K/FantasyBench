@@ -51,6 +51,8 @@ class TradeAssetDecision(BaseModel):
 
 
 class TradeProposalDecision(BaseModel):
+    drop_player_ids: list[str] = Field(default_factory=list)
+
     model_config = ConfigDict(extra="forbid")
 
     action: Literal["propose_trade", "pass"]
@@ -70,6 +72,8 @@ class TradeProposalDecision(BaseModel):
 
 
 class TradeResponseDecision(BaseModel):
+    drop_player_ids: list[str] = Field(default_factory=list)
+
     model_config = ConfigDict(extra="forbid")
 
     action: Literal["accept", "reject", "counter"]

@@ -212,3 +212,64 @@ async def test_truncated_trade_retry_is_audited(
     assert runs[0].success is False
     assert float(runs[0].cost_usd) == 0.001
     assert runs[1].success is True
+
+
+@pytest.mark.asyncio
+async def test_manager_accepts_two_for_one_with_a_drop(
+    engine: Engine, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    league = initialize_league(db, nfl_season=2026)
+    league.roster_config = {"starters": {}, "bench": 2, "ir": 1}
+    first, second = league.teams[:2]
+    players = [Player(full_name=f"RB {i}", position="RB") for i in range(4)]
+    db.add_all(players)
+    db.flush()
+    db.add_all(
+        [
+            RosterAssignment(
+                league_id=league.id,
+                team_id=first.id if i < 2 else second.id,
+                player_id=p.id,
+                slot_type="BENCH",
+                acquired_via="DRAFT",
+            )
+            for i, p in enumerate(players)
+        ]
+    )
+    db.flush()
+    thread, offer = propose_trade(
+        db,
+        league_id=league.id,
+        proposer_team_id=first.id,
+        recipient_team_id=second.id,
+        send_player_ids=[p.id for p in players[:2]],
+        receive_player_ids=[players[2].id],
+    )
+    db.commit()
+
+    class DropProvider:
+        async def decide(self, request: LLMRequest) -> LLMResult:
+            assert "2-for-1" in request.user_prompt
+            assert "drop_player_ids" in request.user_prompt
+            return LLMResult(
+                parsed=TradeResponseDecision(
+                    action="accept",
+                    offer_id=offer.id,
+                    drop_player_ids=[players[3].id],
+                    message="Accept and release bench depth",
+                    public_reasoning="Net roster upgrade",
+                ),
+                raw_response={},
+            )
+
+    automation = ManagerAutomation(
+        sessionmaker(engine, expire_on_commit=False), DropProvider(), Settings()
+    )
+    monkeypatch.setattr(automation, "_record_memory", lambda *args, **kwargs: None)
+    assert await automation._respond_to_trade(league.id, offer.id) == "ACCEPT"
+    db.expire_all()
+    assert thread.status == "PROCESSED"
+    assert (
+        db.scalar(select(RosterAssignment).where(RosterAssignment.player_id == players[3].id))
+        is None
+    )

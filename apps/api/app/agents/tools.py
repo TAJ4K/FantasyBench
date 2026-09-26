@@ -73,6 +73,7 @@ class LeagueToolbox:
                 "projection": (player.metadata_json or {}).get("projection"),
                 "slot_type": assignment.slot_type,
                 "position_slot": assignment.position_slot,
+                "locked": RosterService(self.db).is_player_locked(self._league(), player),
             }
             for assignment, player in rows
         ]
@@ -86,7 +87,18 @@ class LeagueToolbox:
         query = select(Player).where(Player.active.is_(True), Player.id.not_in(owned))
         if position:
             query = query.where(Player.position == position.upper())
-        players = self.db.scalars(query.order_by(Player.full_name).limit(min(limit, 500))).all()
+        query = query.where(Player.position.in_(("QB", "RB", "WR", "TE", "K", "DST")))
+        players = list(self.db.scalars(query))
+        # Select candidates before truncation, using the same rank signal as the draft.
+        players.sort(
+            key=lambda p: (
+                not bool(p.nfl_team),
+                int((p.metadata_json or {}).get("rank") or 10**9),
+                p.full_name,
+                p.id,
+            )
+        )
+        players = players[: max(0, min(limit, 500))]
         return [self._player_summary(player) for player in players]
 
     def get_player(self, player_id: str) -> dict[str, Any]:
@@ -261,7 +273,12 @@ class LeagueToolbox:
         )
 
     def propose_trade(
-        self, to_team_id: str, send: list[str], receive: list[str], message: str
+        self,
+        to_team_id: str,
+        send: list[str],
+        receive: list[str],
+        message: str,
+        drop_player_ids: list[str] | None = None,
     ) -> Any:
         return propose_trade(
             self.db,
@@ -270,11 +287,17 @@ class LeagueToolbox:
             recipient_team_id=to_team_id,
             send_player_ids=send,
             receive_player_ids=receive,
+            drop_player_ids=drop_player_ids or [],
             message=message,
         )
 
     def counter_trade(
-        self, offer_id: str, send: list[str], receive: list[str], message: str
+        self,
+        offer_id: str,
+        send: list[str],
+        receive: list[str],
+        message: str,
+        drop_player_ids: list[str] | None = None,
     ) -> Any:
         return counter_trade(
             self.db,
@@ -282,11 +305,17 @@ class LeagueToolbox:
             countering_team_id=self.team_id,
             send_player_ids=send,
             receive_player_ids=receive,
+            drop_player_ids=drop_player_ids or [],
             message=message,
         )
 
-    def accept_trade(self, offer_id: str) -> TradeThread:
-        return accept_trade(self.db, offer_id=offer_id, accepting_team_id=self.team_id)
+    def accept_trade(self, offer_id: str, drop_player_ids: list[str] | None = None) -> TradeThread:
+        return accept_trade(
+            self.db,
+            offer_id=offer_id,
+            accepting_team_id=self.team_id,
+            drop_player_ids=drop_player_ids or [],
+        )
 
     def reject_trade(self, offer_id: str) -> TradeThread:
         return reject_trade(self.db, offer_id=offer_id, rejecting_team_id=self.team_id)

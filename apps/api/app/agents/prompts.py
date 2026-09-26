@@ -42,9 +42,9 @@ class Prompt:
 
 DECISION_VERSIONS = {
     "draft": "draft_v3",
-    "waiver": "waiver_v2",
+    "waiver": "waiver_v3",
     "lineup": "lineup_v3",
-    "trade": "trade_v2",
+    "trade": "trade_v3",
     "memory": "memory_v1",
 }
 
@@ -54,7 +54,14 @@ def build_prompt(decision_type: str, context: dict[str, Any]) -> Prompt:
     version = DECISION_VERSIONS.get(kind, f"{kind}_v1")
     instructions = {
         "draft": "Select one available player while respecting the roster construction rules.",
-        "waiver": "Submit zero or more legal waiver claims in preference order.",
+        "waiver": (
+            "Submit zero or more legal waiver claims in preference order using exact player IDs. "
+            "You may drop a player to make room: supply drop_player_id for each add when your "
+            "starters plus bench capacity is full. IR drops do not free active roster space. "
+            "Preserve kickoff locks and starter eligibility when choosing drops. "
+            "In instant_free_agency mode only the lowest-numbered priority claim executes; "
+            "return no claims if no add improves your team."
+        ),
         "lineup": (
             "Set a legal lineup from your roster. Preserve every locked_slots assignment exactly; "
             "choose among unlocked players only for the remaining slots. "
@@ -65,6 +72,16 @@ def build_prompt(decision_type: str, context: dict[str, Any]) -> Prompt:
             "Evaluate or propose a legal trade solely for your franchise's benefit. "
             "Use exact player_id values from the supplied rosters, never names or external IDs. "
             "Send assets belong to you; receive assets belong to the other team. "
+            "Uneven trades (2-for-1, 3-for-2, etc.) are allowed. Both final rosters must fit "
+            "starters plus bench capacity; IR does not count, but incoming players do. "
+            "Use drop_player_ids to choose your own rostered players to release if needed. "
+            "For proposals/counters these drops are conditional on eventual acceptance; for "
+            "acceptance they execute together with the trade. Never include traded players, "
+            "duplicates, or kickoff-locked players. Dropping a starter must leave a legal lineup. "
+            "Dropping an IR player does not free active capacity. Only each team's manager "
+            "chooses its drops; the recipient can select theirs when accepting. "
+            "Evaluate net value including players you drop; do not reject solely because an "
+            "uneven trade needs roster space. Return empty drop_player_ids for pass/reject. "
             "For a response, copy offer.offer_id exactly. If can_counter is false, accept or "
             "reject; do not counter. For accept/reject return empty send and receive arrays. "
             "Keep message and public_reasoning to one or two short sentences each. "

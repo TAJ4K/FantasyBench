@@ -33,6 +33,7 @@ def _new_offer(
     message: str | None,
     public_reasoning: str | None,
     parent_offer_id: str | None = None,
+    drop_player_ids: Iterable[str] = (),
 ) -> TradeOffer:
     send = list(dict.fromkeys(send_player_ids))
     receive = list(dict.fromkeys(receive_player_ids))
@@ -47,6 +48,7 @@ def _new_offer(
         message=message,
         public_reasoning=public_reasoning,
         parent_offer_id=parent_offer_id,
+        drop_player_ids=list(drop_player_ids),
     )
     db.add(offer)
     db.flush()
@@ -99,6 +101,7 @@ def propose_trade(
     message: str | None = None,
     public_reasoning: str | None = None,
     expires_at: datetime | None = None,
+    drop_player_ids: Iterable[str] = (),
 ) -> tuple[TradeThread, TradeOffer]:
     ensure_league_unlocked(db, league_id)
     if proposer_team_id == recipient_team_id:
@@ -132,8 +135,10 @@ def propose_trade(
         receive_player_ids=receive_player_ids,
         message=message,
         public_reasoning=public_reasoning,
+        drop_player_ids=drop_player_ids,
     )
-    _validate_assets(db, offer)
+    paired = _validate_assets(db, offer)
+    _validate_drops(db, paired, offer.proposer_team_id, offer.drop_player_ids)
     return thread, offer
 
 
@@ -205,6 +210,7 @@ def counter_trade(
     message: str | None = None,
     public_reasoning: str | None = None,
     max_rounds: int = 4,
+    drop_player_ids: Iterable[str] = (),
 ) -> tuple[TradeThread, TradeOffer]:
     thread, prior = _locked_offer(db, offer_id)
     if prior.sequence != thread.negotiation_rounds:
@@ -231,12 +237,46 @@ def counter_trade(
         message=message,
         public_reasoning=public_reasoning,
         parent_offer_id=prior.id,
+        drop_player_ids=drop_player_ids,
     )
-    _validate_assets(db, offer)
+    paired = _validate_assets(db, offer)
+    _validate_drops(db, paired, offer.proposer_team_id, offer.drop_player_ids)
     return thread, offer
 
 
-def accept_trade(db: Session, *, offer_id: str, accepting_team_id: str) -> TradeThread:
+def _validate_drops(
+    db: Session,
+    paired: list[tuple[TradeAsset, RosterAssignment]],
+    team_id: str,
+    player_ids: Iterable[str],
+) -> list[RosterAssignment]:
+    ids = list(player_ids)
+    if len(ids) != len(set(ids)) or set(ids) & {a.player_id for a, _ in paired}:
+        raise ConflictError("INVALID_TRADE_DROPS", "Drops must be unique and outside trade assets.")
+    rows = list(
+        db.scalars(
+            select(RosterAssignment)
+            .where(RosterAssignment.team_id == team_id, RosterAssignment.player_id.in_(ids))
+            .with_for_update()
+        )
+    )
+    if len(rows) != len(ids):
+        raise ConflictError("TRADE_DROP_NOT_OWNED", "Choose drops from your own current roster.")
+    team = db.get(Team, team_id)
+    assert team is not None
+    service = RosterService(db)
+    if any(service.is_player_locked(team.league, row.player) for row in rows):
+        raise ConflictError("PLAYER_LOCKED", "A selected drop has already reached kickoff.")
+    return rows
+
+
+def accept_trade(
+    db: Session,
+    *,
+    offer_id: str,
+    accepting_team_id: str,
+    drop_player_ids: Iterable[str] = (),
+) -> TradeThread:
     thread, offer = _locked_offer(db, offer_id)
     if offer.sequence != thread.negotiation_rounds:
         raise ConflictError("TRADE_OFFER_SUPERSEDED", "A newer offer exists in this negotiation.")
@@ -271,8 +311,14 @@ def accept_trade(db: Session, *, offer_id: str, accepting_team_id: str) -> Trade
         )
         for team_id in team_ids
     }
+    drops = _validate_drops(db, paired, offer.proposer_team_id, offer.drop_player_ids)
+    drops += _validate_drops(db, paired, accepting_team_id, drop_player_ids)
+    dropped_ids = {row.player_id for row in drops}
     roster_sizes = {
-        team_id: sum(assignment.slot_type != "IR" for assignment in rows)
+        team_id: sum(
+            assignment.slot_type != "IR" and assignment.player_id not in dropped_ids
+            for assignment in rows
+        )
         for team_id, rows in team_rosters.items()
     }
     incoming = {team_id: 0 for team_id in team_ids}
@@ -284,9 +330,24 @@ def accept_trade(db: Session, *, offer_id: str, accepting_team_id: str) -> Trade
     if league is not None:
         limit = _active_roster_limit(league)
         if any(roster_sizes[t] - outgoing[t] + incoming[t] > limit for t in team_ids):
-            raise ConflictError("TRADE_ROSTER_FULL", "The trade would exceed a roster limit.")
+            raise ConflictError(
+                "TRADE_ROSTER_FULL",
+                "The trade would exceed a roster limit; the over-cap team must select drops.",
+            )
 
-    lineups = _post_trade_lineups(db, paired, team_rosters)
+    lineups = _post_trade_lineups(db, paired, team_rosters, drops)
+    for row in drops:
+        db.delete(row)
+        create_transaction(
+            db,
+            league_id=thread.league_id,
+            team_id=row.team_id,
+            player_id=row.player_id,
+            transaction_type="DROP",
+            week=league.current_week if league else None,
+            idempotency_key=f"trade:{offer.id}:drop:{row.player_id}",
+            details={"reason": "trade", "thread_id": thread.id, "offer_id": offer.id},
+        )
     offer.status = "ACCEPTED"
     thread.status = "ACCEPTED"
     for asset, assignment in paired:
@@ -329,11 +390,13 @@ def _post_trade_lineups(
     db: Session,
     paired: list[tuple[TradeAsset, RosterAssignment]],
     team_rosters: dict[str, list[RosterAssignment]],
+    drops: list[RosterAssignment],
 ) -> dict[str, dict[str, str]]:
     """Plan legal lineups before moving assets, preserving locks and preferring incumbents."""
     service = RosterService(db)
-    traded = {assignment.player_id for _, assignment in paired}
+    traded = {assignment.player_id for _, assignment in paired} | {r.player_id for r in drops}
     affected = {asset.from_team_id for asset, row in paired if row.slot_type == "STARTER"}
+    affected |= {row.team_id for row in drops if row.slot_type == "STARTER"}
     result: dict[str, dict[str, str]] = {}
     for team_id in sorted(affected):
         team = db.get(Team, team_id)

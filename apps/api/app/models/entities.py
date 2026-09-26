@@ -286,6 +286,7 @@ class TradeOffer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(30), default="PROPOSED")
     message: Mapped[str | None] = mapped_column(Text)
     public_reasoning: Mapped[str | None] = mapped_column(Text)
+    drop_player_ids: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
     parent_offer_id: Mapped[str | None] = mapped_column(ForeignKey("trade_offers.id"))
 
 

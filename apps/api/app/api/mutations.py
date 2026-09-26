@@ -375,6 +375,7 @@ def create_trade(
         recipient_team_id=payload.to_team_id,
         send_player_ids=[asset.id for asset in payload.send],
         receive_player_ids=[asset.id for asset in payload.receive],
+        drop_player_ids=payload.drop_player_ids,
         message=payload.message,
         public_reasoning=payload.public_reasoning,
         expires_at=payload.expires_at,
@@ -403,6 +404,7 @@ def trade_counter(
         countering_team_id=payload.proposer_team_id,
         send_player_ids=[asset.id for asset in payload.send],
         receive_player_ids=[asset.id for asset in payload.receive],
+        drop_player_ids=payload.drop_player_ids,
         message=payload.message,
         public_reasoning=payload.public_reasoning,
         max_rounds=request.app.state.settings.max_trade_negotiation_rounds,
@@ -425,7 +427,12 @@ def trade_counter(
 def trade_accept(
     offer_id: str, payload: TradeActionRequest, db: DbSession, _: AdminAccess
 ) -> dict[str, Any]:
-    thread = accept_trade(db, offer_id=offer_id, accepting_team_id=payload.team_id)
+    thread = accept_trade(
+        db,
+        offer_id=offer_id,
+        accepting_team_id=payload.team_id,
+        drop_player_ids=payload.drop_player_ids,
+    )
     emit_event(
         db,
         thread.league_id,

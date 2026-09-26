@@ -209,28 +209,15 @@ class ManagerAutomation:
             team = db.get(Team, team_id)
             if not period or not team:
                 raise ValueError("waiver period or team does not exist")
-            owned_ids = select(RosterAssignment.player_id).where(
-                RosterAssignment.league_id == period.league_id
-            )
-            available = list(
-                db.scalars(
-                    select(Player)
-                    .where(Player.active.is_(True), Player.id.not_in(owned_ids))
-                    .limit(100)
-                )
-            )
-            roster = db.execute(
-                select(RosterAssignment, Player)
-                .join(Player, Player.id == RosterAssignment.player_id)
-                .where(RosterAssignment.team_id == team_id)
-            ).all()
+            toolbox = LeagueToolbox(db, period.league_id, team_id)
             context = {
                 "waiver_period_id": period.id,
                 "week": period.week,
                 "waiver_priority": team.waiver_priority,
                 "waiver_rule": "CONTINUAL_ROLLING",
-                "available_players": [_context_player(player) for player in available],
-                "droppable_players": [_context_player(player) for _, player in roster],
+                "available_players": toolbox.get_available_players(limit=100),
+                "droppable_players": toolbox.get_roster(),
+                "roster_config": team.league.roster_config,
             }
             prompt = build_prompt("waiver", context)
             request = _request(
@@ -306,6 +293,7 @@ class ManagerAutomation:
                 "available_players": toolbox.get_available_players(limit=100),
                 "droppable_players": toolbox.get_roster(),
                 "decision_mode": "instant_free_agency",
+                "roster_config": team.league.roster_config,
             }
             prompt = build_prompt("waiver", context)
             request = _request(
@@ -323,7 +311,7 @@ class ManagerAutomation:
             decision = WaiverDecision.model_validate(result.parsed)
         if not decision.claims:
             return False
-        claim = decision.claims[0]
+        claim = min(decision.claims, key=lambda claim: claim.priority)
         with self.session_factory() as db:
             assignment, _ = add_free_agent(
                 db,
@@ -451,6 +439,7 @@ class ManagerAutomation:
                     "proposer_team_id": offer.proposer_team_id,
                     "recipient_team_id": offer.recipient_team_id,
                     "message": offer.message,
+                    "proposer_drop_player_ids": offer.drop_player_ids,
                     "assets": [
                         {
                             "player_id": asset.player_id,
@@ -471,8 +460,10 @@ class ManagerAutomation:
                 "execution_rules": (
                     "Both post-trade active rosters must fit starters plus bench capacity. "
                     "Incoming players count as active even if previously on IR. No players are "
-                    "automatically dropped. A trade must leave legal lineups. If acceptance "
-                    "is illegal, counter with legal assets or reject."
+                    "automatically selected for dropping: choose your own drop_player_ids to make "
+                    "space when accepting. The proposer preauthorized proposer_drop_player_ids. "
+                    "You cannot drop their players. A trade must leave legal lineups. If their "
+                    "roster still exceeds capacity, counter so they can choose drops on acceptance."
                 ),
             }
             prompt = build_prompt("trade", context)
@@ -503,7 +494,12 @@ class ManagerAutomation:
         try:
             with self.session_factory() as db:
                 if decision.action == "accept":
-                    thread = accept_trade(db, offer_id=offer_id, accepting_team_id=team.id)
+                    thread = accept_trade(
+                        db,
+                        offer_id=offer_id,
+                        accepting_team_id=team.id,
+                        drop_player_ids=decision.drop_player_ids,
+                    )
                     event_type = "TRADE_ACCEPTED"
                 elif decision.action == "counter":
                     thread, _ = counter_trade(
@@ -512,6 +508,7 @@ class ManagerAutomation:
                         countering_team_id=team.id,
                         send_player_ids=[asset.id for asset in decision.send],
                         receive_player_ids=[asset.id for asset in decision.receive],
+                        drop_player_ids=decision.drop_player_ids,
                         message=decision.message,
                         public_reasoning=decision.public_reasoning,
                         max_rounds=self.settings.max_trade_negotiation_rounds,
@@ -533,6 +530,9 @@ class ManagerAutomation:
         except ConflictError as exc:
             if validation_error is not None or exc.code not in {
                 "TRADE_ROSTER_FULL",
+                "INVALID_TRADE_DROPS",
+                "TRADE_DROP_NOT_OWNED",
+                "PLAYER_LOCKED",
                 "TRADE_STARTER_REQUIRES_LINEUP_CHANGE",
                 "TRADE_ROUND_LIMIT",
                 "INVALID_TRADE_ASSETS",
@@ -575,6 +575,7 @@ class ManagerAutomation:
             context = {
                 "my_roster": toolbox.get_roster(),
                 "other_rosters": {other.id: toolbox.get_roster(other.id) for other in other_teams},
+                "roster_config": team.league.roster_config,
                 "standings": toolbox.get_standings(),
             }
             prompt = build_prompt("trade", context)
@@ -602,6 +603,7 @@ class ManagerAutomation:
                 recipient_team_id=decision.to_team_id,
                 send_player_ids=[asset.id for asset in decision.send],
                 receive_player_ids=[asset.id for asset in decision.receive],
+                drop_player_ids=decision.drop_player_ids,
                 message=decision.message,
                 public_reasoning=decision.public_reasoning,
             )

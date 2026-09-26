@@ -71,6 +71,8 @@ class TradeAssetRequest(BaseModel):
 
 
 class TradeProposalRequest(BaseModel):
+    drop_player_ids: list[str] = Field(default_factory=list)
+
     from_team_id: str
     to_team_id: str
     send: list[TradeAssetRequest] = Field(min_length=1)
@@ -81,6 +83,8 @@ class TradeProposalRequest(BaseModel):
 
 
 class TradeCounterRequest(BaseModel):
+    drop_player_ids: list[str] = Field(default_factory=list)
+
     proposer_team_id: str
     send: list[TradeAssetRequest] = Field(min_length=1)
     receive: list[TradeAssetRequest] = Field(min_length=1)
@@ -89,6 +93,8 @@ class TradeCounterRequest(BaseModel):
 
 
 class TradeActionRequest(BaseModel):
+    drop_player_ids: list[str] = Field(default_factory=list)
+
     team_id: str
     message: str = Field(default="", max_length=1000)
 
