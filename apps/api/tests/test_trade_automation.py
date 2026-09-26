@@ -172,7 +172,7 @@ async def test_truncated_trade_retry_is_audited(
 ) -> None:
     league = initialize_league(db, nfl_season=2026)
     team = league.teams[0]
-    team.model_identifier = "deepseek/deepseek-v4-pro"
+    team.model_identifier = "deepseek/deepseek-v4.1-flash"
     db.commit()
     provider = AsyncMock()
     decision = TradeResponseDecision(

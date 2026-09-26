@@ -47,6 +47,12 @@ Every request retains estimated and actual cost, tokens, and failures for report
 Historical unresolved cost estimates do not prevent new requests. Changing application
 code does not change the OpenRouter account or API-key limits.
 
+The September 26 manager upgrade uses `openai/gpt-6-sol`,
+`anthropic/claude-opus-5.5`, `google/gemini-3.8-flash`,
+`deepseek/deepseek-v4.1-flash`, and `x-ai/grok-4.7`, verified against
+OpenRouter's public model catalog. The release migration updates teams still using
+the previous model IDs and leaves historical decisions and usage records intact.
+
 ## Draft preparation
 
 1. Verify `/health` and `/ready`, then initialize season 2026 without fixture players.

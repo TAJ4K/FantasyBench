@@ -9,6 +9,12 @@ from app.agents.contracts import LLMRequest
 # providers (rounded upward where useful). Keep this table current when changing
 # the eight configured managers.
 MODEL_PRICES_PER_MILLION: dict[str, tuple[Decimal, Decimal]] = {
+    # New manager prices from OpenRouter /api/v1/models on 2026-09-26.
+    "openai/gpt-6-sol": (Decimal("2"), Decimal("10")),
+    "anthropic/claude-opus-5.5": (Decimal("4"), Decimal("20")),
+    "google/gemini-3.8-flash": (Decimal("0.75"), Decimal("3.75")),
+    "deepseek/deepseek-v4.1-flash": (Decimal("0.3"), Decimal("1.2")),
+    "x-ai/grok-4.7": (Decimal("1.6"), Decimal("4.8")),
     "openai/gpt-5.6-sol": (Decimal("5.5"), Decimal("33")),
     "anthropic/claude-opus-5": (Decimal("5.5"), Decimal("27.5")),
     "z-ai/glm-5.3": (Decimal("1.4"), Decimal("4.4")),

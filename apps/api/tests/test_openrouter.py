@@ -17,7 +17,7 @@ def _request() -> LLMRequest:
     return LLMRequest(
         league_id="league",
         team_id="team",
-        model="openai/gpt-5.6-sol",
+        model="openai/gpt-6-sol",
         decision_type="DRAFT",
         prompt_version="draft_v1",
         system_prompt="system",

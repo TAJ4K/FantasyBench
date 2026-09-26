@@ -102,7 +102,9 @@ class OpenRouterProvider:
                 }
             ]
         payload["reasoning"] = {"effort": request.reasoning_effort or "low", "exclude": True}
-        if request.temperature is not None and not request.model.startswith("openai/gpt-5"):
+        if request.temperature is not None and not request.model.startswith(
+            ("openai/gpt-5", "openai/gpt-6")
+        ):
             payload["temperature"] = request.temperature
         if request.max_tokens is not None:
             payload["max_tokens"] = request.max_tokens
