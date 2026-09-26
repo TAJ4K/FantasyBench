@@ -629,7 +629,7 @@ class ManagerAutomation:
             return await self._invocation(db).invoke(request)
         except LLMResponseError as exc:
             choices = exc.raw_response.get("choices") or [{}]
-            # A fresh invocation preserves usage auditing and budget checks for both calls.
+            # A fresh invocation preserves usage auditing for both calls.
             retry = replace(
                 request,
                 max_tokens=(
@@ -671,9 +671,6 @@ class ManagerAutomation:
         return LLMInvocationService(
             db,
             self.provider,
-            daily_budget_usd=self.settings.openrouter_daily_budget_usd,
-            season_budget_usd=self.settings.openrouter_season_budget_usd,
-            max_single_request_usd=self.settings.openrouter_max_single_request_usd,
         )
 
 

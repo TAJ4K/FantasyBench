@@ -95,7 +95,7 @@ The API test suite is deterministic and network-free. It covers 120 draft picks,
 - Public projections withhold unrevealed draft identities and unprocessed waiver strategy.
 - Every model request retains public decision data, usage, latency, estimated cost, actual cost, and failures. Hidden chain-of-thought is neither requested nor exposed.
 - The in-process scheduler is intentionally single-replica until distributed leader election is introduced.
-- `LLM_PROVIDER=fake` makes local seasons deterministic and free. Paid OpenRouter runs require explicit hard budget controls.
+- `LLM_PROVIDER=fake` makes local seasons deterministic and free. Paid runs continue until OpenRouter rejects them; costs remain audited.
 
 Read [the architecture](docs/ARCHITECTURE.md) for service boundaries and [the deployment runbook](docs/DEPLOYMENT.md) for production operations.
 
@@ -103,4 +103,4 @@ Read [the architecture](docs/ARCHITECTURE.md) for service boundaries and [the de
 
 The temporary production deployment uses a single Heroku Python web dyno and persistent
 Heroku PostgreSQL, with Netlify proxying the live API under `/backend`.
-See [the Heroku runbook](docs/HEROKU.md) for configuration, budgets and migration.
+See [the Heroku runbook](docs/HEROKU.md) for configuration, provider limits and migration.

@@ -85,7 +85,6 @@ async def test_openrouter_structured_success_and_usage() -> None:
         assert payload["provider"] == {
             "sort": "price",
             "require_parameters": True,
-            "max_price": {"prompt": 5.5, "completion": 33.0},
         }
         return _success(request)
 

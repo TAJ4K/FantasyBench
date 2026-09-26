@@ -12,7 +12,6 @@ from typing import Any
 import httpx
 
 from app.agents.contracts import LLMRequest, LLMResult
-from app.agents.costs import MODEL_PRICES_PER_MILLION
 from app.agents.errors import LLMProviderError, LLMResponseError
 
 logger = logging.getLogger(__name__)
@@ -107,17 +106,7 @@ class OpenRouterProvider:
             payload["temperature"] = request.temperature
         if request.max_tokens is not None:
             payload["max_tokens"] = request.max_tokens
-        prices = MODEL_PRICES_PER_MILLION.get(request.model)
-        if prices is not None:
-            input_rate, output_rate = prices
-            payload["provider"] = {
-                "sort": "price",
-                "require_parameters": True,
-                "max_price": {
-                    "prompt": float(input_rate),
-                    "completion": float(output_rate),
-                },
-            }
+        payload["provider"] = {"sort": "price", "require_parameters": True}
 
         response: httpx.Response | None = None
         for attempt in range(self.max_retries + 1):

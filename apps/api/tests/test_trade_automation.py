@@ -5,7 +5,7 @@ from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.agents.contracts import LLMRequest, LLMResult
-from app.agents.errors import LLMBudgetExceeded, LLMResponseError
+from app.agents.errors import LLMResponseError
 from app.agents.fake import DeterministicFakeProvider
 from app.core.config import Settings
 from app.core.errors import ConflictError
@@ -166,10 +166,9 @@ async def test_new_proposal_and_counters_are_answered_in_same_review(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("budget", [None, 0.001])
 @pytest.mark.parametrize("finish_reason", ["length", "stop"])
-async def test_truncated_trade_retry_is_audited_and_budget_checked(
-    engine: Engine, db: Session, budget: float | None, finish_reason: str
+async def test_truncated_trade_retry_is_audited(
+    engine: Engine, db: Session, finish_reason: str
 ) -> None:
     league = initialize_league(db, nfl_season=2026)
     team = league.teams[0]
@@ -189,7 +188,7 @@ async def test_truncated_trade_retry_is_audited_and_budget_checked(
         ),
         LLMResult(parsed=decision, raw_response={}, cost_usd=0.002),
     ]
-    settings = Settings(openrouter_season_budget_usd=budget)
+    settings = Settings()
     automation = ManagerAutomation(sessionmaker(engine), provider, settings)
     request = _request(
         team,
@@ -202,23 +201,14 @@ async def test_truncated_trade_retry_is_audited_and_budget_checked(
         {},
         settings,
     )
-    if budget is not None:
-        # First request can run; its paid failure exhausts the remaining budget.
-        from dataclasses import replace
-
-        request = replace(request, metadata={"estimated_cost_usd": "0.001"})
-        with pytest.raises(LLMBudgetExceeded):
-            await automation._invoke_trade(db, request)
-        assert provider.decide.await_count == 1
-    else:
-        result = await automation._invoke_trade(db, request)
-        assert result.parsed == decision
-        assert [call.args[0].max_tokens for call in provider.decide.await_args_list] == [
-            8192,
-            16384 if finish_reason == "length" else 8192,
-        ]
+    result = await automation._invoke_trade(db, request)
+    assert result.parsed == decision
+    assert [call.args[0].max_tokens for call in provider.decide.await_args_list] == [
+        8192,
+        16384 if finish_reason == "length" else 8192,
+    ]
     runs = list(db.scalars(select(LLMRun).order_by(LLMRun.started_at)))
     assert len(runs) == 2
     assert runs[0].success is False
     assert float(runs[0].cost_usd) == 0.001
-    assert runs[1].success is (budget is None)
+    assert runs[1].success is True

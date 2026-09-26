@@ -35,17 +35,17 @@ Set `APP_ENV=production`, `LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, a ran
 The service normalizes Heroku PostgreSQL URLs to the installed psycopg driver.
 Use `WEB_CONCURRENCY=1`, `AUTO_RESUME_DRAFT=true`, and a single web dyno.
 
-Initial limits: $15 non-resetting OpenRouter key cap, $14 application season cap,
-$10 daily cap, $1.25 conservative single-request reservation, 2,400 output tokens,
-20 requests/minute, one transport retry, and explicit low reasoning by default. Raise the provider-limit confirmation only
-after checking the actual key limit. The app pauses failed draft turns rather than
-silently substituting another model. Model calls made during operator preflight
-count toward the provider key cap but not the league's usage table.
+OpenRouter is the authority for credit and spending limits. The application imposes no
+daily, season, per-request, or provider-price spending caps. Legacy
+`OPENROUTER_DAILY_BUDGET_USD`, `OPENROUTER_SEASON_BUDGET_USD`,
+`OPENROUTER_MAX_SINGLE_REQUEST_USD`, and `OPENROUTER_PROVIDER_SPEND_LIMIT_CONFIRMED`
+config vars are ignored and can be removed. Request rate, token limits, timeouts, and
+bounded retries still apply. Provider credit failures are recorded in the audit;
+managers never silently substitute another model.
 
-Budget checks reserve estimated costs while requests are in flight. Completed
-responses with a reported charge count their actual cost even when the decision
-fails validation. Failed requests without billing data retain their reservation.
-This accounting also applies to historical failures without modifying their audit records.
+Every request retains estimated and actual cost, tokens, and failures for reporting.
+Historical unresolved cost estimates do not prevent new requests. Changing application
+code does not change the OpenRouter account or API-key limits.
 
 ## Draft preparation
 
@@ -68,8 +68,7 @@ snapshots and excludes unfinished requests from the error count.
 
 Trade decisions use `TRADE_MAX_TOKENS` (8,192 by default) and retry an invalid
 structured response once. Truncation doubles the allowance, capped at 32,768;
-other formatting errors keep the same allowance. Each attempt passes
-the existing spending checks and is recorded separately. Daily trade reviews
+other formatting errors keep the same allowance. Each attempt is recorded separately. Daily trade reviews
 follow new proposals and counteroffers through the negotiation limit in the same
 run. Accepted starter trades restore legal lineups atomically, preserving kickoff
 locks; trades that cannot leave a legal lineup still fail validation.

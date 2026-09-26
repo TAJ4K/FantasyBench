@@ -7,18 +7,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents.contracts import LLMRequest, LLMResult
-from app.agents.errors import LLMBudgetExceeded, LLMResponseError
+from app.agents.errors import LLMProviderError, LLMResponseError
 from app.agents.service import LLMInvocationService
+from app.core.config import Settings
 from app.models.entities import LLMRun
 from app.schemas.decisions import TradeResponseDecision
 from app.services.initialization import initialize_league
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("budget_kind", ["daily", "season"])
 @pytest.mark.parametrize("actual_cost", [0, 0.1])
-async def test_paid_invalid_response_releases_unused_reservation(
-    db: Session, budget_kind: str, actual_cost: float,
+async def test_paid_invalid_response_retains_cost_audit(
+    db: Session, actual_cost: float,
 ) -> None:
     league = initialize_league(db, nfl_season=2026)
     team = league.teams[0]
@@ -30,11 +30,7 @@ async def test_paid_invalid_response_releases_unused_reservation(
         LLMResponseError("invalid JSON", raw_response={"usage": {"cost": actual_cost}}),
         LLMResult(parsed=decision, raw_response={}, cost_usd=0.1),
     ]
-    service = LLMInvocationService(
-        db, provider,
-        daily_budget_usd=1 if budget_kind == "daily" else None,
-        season_budget_usd=1 if budget_kind == "season" else None,
-    )
+    service = LLMInvocationService(db, provider)
     request = LLMRequest(
         league_id=league.id, team_id=team.id, model=team.model_identifier,
         decision_type="TRADE_RESPONSE", prompt_version="test", system_prompt="system",
@@ -43,7 +39,6 @@ async def test_paid_invalid_response_releases_unused_reservation(
     )
     with pytest.raises(LLMResponseError):
         await service.invoke(request)
-    # The next $0.80 reservation fits after a known $0.00/$0.10 charge.
     assert (await service.invoke(request)).parsed == decision
     runs = list(db.scalars(select(LLMRun).order_by(LLMRun.started_at)))
     assert provider.decide.await_count == 2
@@ -54,7 +49,7 @@ async def test_paid_invalid_response_releases_unused_reservation(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("billing", ["pending", "timeout", "missing", "null", "charged"])
-async def test_budget_preserves_unsettled_reservations_and_enforces_real_charges(
+async def test_historical_spending_never_blocks_provider_calls(
     db: Session, billing: str,
 ) -> None:
     league = initialize_league(db, nfl_season=2026)
@@ -67,19 +62,64 @@ async def test_budget_preserves_unsettled_reservations_and_enforces_real_charges
         league_id=league.id, team_id=team.id, model=team.model_identifier,
         decision_type="TRADE_RESPONSE", prompt_version="test", started_at=now,
         completed_at=None if billing == "pending" else now,
-        success=False, estimated_cost_usd=Decimal("0.8"),
-        cost_usd=Decimal("0.3") if billing == "charged" else Decimal("0"),
+        success=False, estimated_cost_usd=Decimal("1000"),
+        cost_usd=Decimal("1000") if billing == "charged" else Decimal("0"),
         raw_response=None if billing in {"pending", "timeout"} else raw_response,
     ))
     db.commit()
     provider = AsyncMock()
-    service = LLMInvocationService(db, provider, season_budget_usd=1)
+    decision = TradeResponseDecision(
+        action="reject", offer_id="offer", message="No", public_reasoning="Not beneficial",
+    )
+    provider.decide.return_value = LLMResult(parsed=decision, raw_response={}, cost_usd=20)
+    service = LLMInvocationService(db, provider)
     request = LLMRequest(
         league_id=league.id, team_id=team.id, model=team.model_identifier,
         decision_type="TRADE_RESPONSE", prompt_version="test", system_prompt="system",
         user_prompt="user", response_model=TradeResponseDecision,
         metadata={"estimated_cost_usd": "0.8"},
     )
-    with pytest.raises(LLMBudgetExceeded, match="season OpenRouter budget exhausted"):
-        await service.invoke(request)
-    provider.decide.assert_not_awaited()
+    assert (await service.invoke(request)).parsed == decision
+    provider.decide.assert_awaited_once()
+    run = db.scalars(select(LLMRun).order_by(LLMRun.started_at.desc())).first()
+    assert run.success is True
+    assert run.cost_usd == Decimal("20")
+
+
+@pytest.mark.asyncio
+async def test_provider_credit_rejection_is_audited(db: Session) -> None:
+    league = initialize_league(db, nfl_season=2026)
+    team = league.teams[0]
+    provider = AsyncMock()
+    provider.decide.side_effect = LLMProviderError("Insufficient credits", status_code=402)
+    request = LLMRequest(
+        league_id=league.id, team_id=team.id, model="unknown/model",
+        decision_type="TRADE_RESPONSE", prompt_version="test", system_prompt="system",
+        user_prompt="user", response_model=TradeResponseDecision,
+    )
+    with pytest.raises(LLMProviderError, match="Insufficient credits"):
+        await LLMInvocationService(db, provider).invoke(request)
+    provider.decide.assert_awaited_once()
+    run = db.scalar(select(LLMRun))
+    assert run.success is False
+    assert run.completed_at is not None
+    assert "Insufficient credits" in run.error
+
+
+@pytest.mark.parametrize("legacy_caps", [False, True])
+def test_production_relies_on_provider_limits(monkeypatch, legacy_caps: bool) -> None:
+    for name in (
+        "OPENROUTER_DAILY_BUDGET_USD", "OPENROUTER_SEASON_BUDGET_USD",
+        "OPENROUTER_MAX_SINGLE_REQUEST_USD", "OPENROUTER_PROVIDER_SPEND_LIMIT_CONFIRMED",
+    ):
+        if legacy_caps:
+            monkeypatch.setenv(name, "0")
+        else:
+            monkeypatch.delenv(name, raising=False)
+    settings = Settings(
+        _env_file=None, app_env="production", admin_api_key="a" * 32,
+        llm_provider="openrouter", openrouter_api_key="test-key",
+        database_url="postgresql+psycopg://user:secret@localhost/league",
+    )
+    assert settings.llm_provider == "openrouter"
+    assert "openrouter_season_budget_usd" not in settings.model_dump()

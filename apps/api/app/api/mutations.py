@@ -703,9 +703,6 @@ async def trigger_decision(
     service = LLMInvocationService(
         db,
         request.app.state.llm_provider,
-        daily_budget_usd=request.app.state.settings.openrouter_daily_budget_usd,
-        season_budget_usd=request.app.state.settings.openrouter_season_budget_usd,
-        max_single_request_usd=request.app.state.settings.openrouter_max_single_request_usd,
     )
     result = await service.invoke(llm_request)
     return {
@@ -790,9 +787,6 @@ async def retry_failed_decision(
     result = await LLMInvocationService(
         db,
         request.app.state.llm_provider,
-        daily_budget_usd=request.app.state.settings.openrouter_daily_budget_usd,
-        season_budget_usd=request.app.state.settings.openrouter_season_budget_usd,
-        max_single_request_usd=request.app.state.settings.openrouter_max_single_request_usd,
     ).invoke(llm_request)
     return {
         "prior_run_id": run_id,

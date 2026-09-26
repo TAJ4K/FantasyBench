@@ -32,21 +32,15 @@ POSTGRES_PASSWORD=REDACTED_DIFFERENT_SECRET
 ADMIN_API_KEY=REDACTED_LONG_RANDOM_SECRET
 LLM_PROVIDER=openrouter
 OPENROUTER_API_KEY=REDACTED_OPENROUTER_KEY
-OPENROUTER_DAILY_BUDGET_USD=10
-OPENROUTER_SEASON_BUDGET_USD=200
-OPENROUTER_MAX_SINGLE_REQUEST_USD=0.50
-# Set only after configuring the dedicated key limit/organization guardrail in OpenRouter.
-OPENROUTER_PROVIDER_SPEND_LIMIT_CONFIRMED=true
 AUTO_RESUME_DRAFT=true
 CORS_ORIGINS=https://league.example.com
 ```
 
 Compose supplies its own `DATABASE_URL` using `POSTGRES_PASSWORD`; keep both values aligned if you
 run outside Compose. Production deliberately refuses the fake provider, SQLite, missing/default
-secrets, or a missing OpenRouter key. Set all three budget ceilings, request rate, timeout, and token
-limit. Configure a dedicated OpenRouter API-key spending limit or organization guardrail no higher
-than the application budget before confirming the setting above. Per-request routing also rejects
-providers priced above the verified model table. Confirm every requested model slug is currently
+secrets, or a missing OpenRouter key. OpenRouter controls credit and spending limits; the
+application records costs but imposes no daily, season, per-request, or provider-price caps.
+Configure request rate, timeout, and token limits. Confirm every requested model slug is currently
 available before deployment. The application fails provider calls rather than silently replacing a
 manager.
 
@@ -87,7 +81,7 @@ curl https://api.example.com/api/v1/draft
 
 The draft must report `NOT_STARTED`. Initialization creates the eight franchises, settings,
 schedule, and draft order; it does **not** ask an LLM to draft. Synchronize/verify player data and
-model configuration, inspect draft order and budgets, then take a fresh backup.
+model configuration, inspect draft order and OpenRouter credit availability, then take a fresh backup.
 
 Only a deliberate commissioner action starts drafting:
 

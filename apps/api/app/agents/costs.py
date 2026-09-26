@@ -20,9 +20,8 @@ MODEL_PRICES_PER_MILLION: dict[str, tuple[Decimal, Decimal]] = {
     "moonshotai/kimi-k3": (Decimal("3"), Decimal("15")),
 }
 
-# Protect the reservation against tokenizer variance, hidden provider framing,
-# reasoning-token accounting differences, and modest price drift. Unknown models
-# still fail closed whenever a budget is enabled.
+# Estimates include tokenizer variance, hidden provider framing, reasoning tokens,
+# and modest price drift. They are informational and never block requests.
 COST_SAFETY_MULTIPLIER = Decimal("2.5")
 
 

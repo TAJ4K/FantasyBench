@@ -20,7 +20,3 @@ class LLMResponseError(LLMError):
     def __init__(self, message: str, *, raw_response: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.raw_response = raw_response or {}
-
-
-class LLMBudgetExceeded(LLMError):
-    """An invocation was refused by a configured spending limit."""

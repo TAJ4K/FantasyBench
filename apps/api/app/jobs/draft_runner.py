@@ -239,9 +239,6 @@ class DraftRunner:
                 invocation = LLMInvocationService(
                     db,
                     self.provider,
-                    daily_budget_usd=self.settings.openrouter_daily_budget_usd,
-                    season_budget_usd=self.settings.openrouter_season_budget_usd,
-                    max_single_request_usd=self.settings.openrouter_max_single_request_usd,
                 )
                 try:
                     result = await self._invoke_with_heartbeat(invocation, request, league_id)

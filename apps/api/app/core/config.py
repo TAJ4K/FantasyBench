@@ -25,10 +25,6 @@ class Settings(BaseSettings):
     openrouter_temperature: float = 0.2
     openrouter_max_tokens: int = 1200
     openrouter_requests_per_minute: int = 30
-    openrouter_daily_budget_usd: float | None = None
-    openrouter_season_budget_usd: float | None = None
-    openrouter_max_single_request_usd: float | None = None
-    openrouter_provider_spend_limit_confirmed: bool = False
     openrouter_site_url: str | None = None
     openrouter_app_name: str = "Fantasy Bench"
 
@@ -70,19 +66,6 @@ class Settings(BaseSettings):
             problems.append("LLM_PROVIDER must be openrouter")
         if not self.openrouter_api_key:
             problems.append("OPENROUTER_API_KEY is required")
-        if self.openrouter_daily_budget_usd is None or self.openrouter_daily_budget_usd <= 0:
-            problems.append("OPENROUTER_DAILY_BUDGET_USD must be a positive hard cap")
-        if self.openrouter_season_budget_usd is None or self.openrouter_season_budget_usd <= 0:
-            problems.append("OPENROUTER_SEASON_BUDGET_USD must be a positive hard cap")
-        if (
-            self.openrouter_max_single_request_usd is None
-            or self.openrouter_max_single_request_usd <= 0
-        ):
-            problems.append("OPENROUTER_MAX_SINGLE_REQUEST_USD must be a positive hard cap")
-        if not self.openrouter_provider_spend_limit_confirmed:
-            problems.append(
-                "OPENROUTER_PROVIDER_SPEND_LIMIT_CONFIRMED must attest to an external key limit"
-            )
         if not self.database_url.startswith(("postgresql://", "postgresql+psycopg://")):
             problems.append("DATABASE_URL must use PostgreSQL")
         if "change-me" in self.database_url.lower():
