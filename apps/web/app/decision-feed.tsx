@@ -15,7 +15,7 @@ export type DecisionEvent = {
   player: Player | null;
   dropped_player?: Player | null;
   public_commentary?: string | null;
-  data: { public_reasoning?: string; to_team_id?: string; offer_id?: string };
+  data: { public_reasoning?: string; to_team_id?: string; offer_id?: string; research?: ResearchStep[] };
 };
 type Offer = {
   id: string;
@@ -30,7 +30,34 @@ type Offer = {
 type Trade = { id: string; status: string; expires_at: string | null; offers: Offer[] };
 const label = (value: string) => value.toLowerCase().replaceAll('_', ' ');
 const tradeStatus = (status: string) => ({ PROPOSED: 'Awaiting response', COUNTERED: 'Counteroffer pending', PROCESSED: 'Trade completed', ACCEPTED: 'Accepted', REJECTED: 'Declined', CANCELLED: 'Cancelled', EXPIRED: 'Expired' }[status] || label(status));
-const tradeAction = (event: string) => ({ TRADE_PROPOSED: 'proposed a trade', TRADE_COUNTERED: 'made a counteroffer', TRADE_ACCEPTED: 'accepted the trade', TRADE_REJECTED: 'declined the trade', TRADE_CANCELLED: 'cancelled the trade' }[event] || label(event));
+const tradeAction = (event: string) => ({ TRADE_REVIEWED: 'reviewed trade options', TRADE_PROPOSED: 'proposed a trade', TRADE_COUNTERED: 'made a counteroffer', TRADE_ACCEPTED: 'accepted the trade', TRADE_REJECTED: 'declined the trade', TRADE_CANCELLED: 'cancelled the trade' }[event] || label(event));
+
+type ResearchPlayer = {
+  player_id: string; name: string; position?: string; nfl_team?: string | null;
+  injury_status?: string | null; owner_team_name?: string | null;
+  performance?: { season_points: number | null; points_per_recorded_game: number | null;
+    games_with_stats: number; through_week: number; position_rank_by_total: number | null };
+};
+type ResearchStep = { tool: string; arguments: { position?: string; pool?: string; metric?: string; nfl_team?: string };
+  result: { players?: ResearchPlayer[]; roster?: ResearchPlayer[]; name?: string; player_id?: string;
+    performance?: ResearchPlayer['performance']; error?: string } };
+
+function ResearchTrail({ steps }: { steps: ResearchStep[] }) {
+  return <details className="manager-research">
+    <summary>Manager research · {steps.length} {steps.length === 1 ? 'lookup' : 'lookups'}</summary>
+    <p className="research-note">Data consulted before this decision. Points use league scoring and exclude the current week. Averages use games with available stats.</p>
+    <ol>{steps.map((step, index) => {
+      const title = step.tool === 'player_rankings' ? `${step.arguments.position} rankings · ${label(step.arguments.pool || 'all')} · ${label(step.arguments.metric || '')}`
+        : step.tool === 'nfl_team_context' ? `${step.arguments.nfl_team} teammates and availability`
+        : step.tool === 'team_roster' ? 'Fantasy roster comparison' : `Player profile · ${step.result.name || 'player'}`;
+      const players = step.result.players || step.result.roster || (step.result.player_id ? [step.result as ResearchPlayer] : []);
+      return <li key={index}><b>{title}</b>{step.result.error ? <p>Lookup unavailable; the manager received an error.</p> : <ul>{players.slice(0, 5).map(player => <li key={player.player_id}>
+        <span>{player.name}{player.position && ` · ${player.position}`}{player.owner_team_name && ` · ${player.owner_team_name}`}{player.injury_status && ` · ${player.injury_status}`}</span>
+        <small>{player.performance?.season_points != null ? `${player.performance.season_points.toFixed(1)} pts · ${player.performance.points_per_recorded_game?.toFixed(1)} per recorded game · ${player.performance.games_with_stats} games · through W${player.performance.through_week}` : 'No completed-week performance data'}</small>
+      </li>)}</ul>}{players.length > 5 && <small>Showing 5 of {players.length} players consulted.</small>}</li>;
+    })}</ol>
+  </details>;
+}
 
 export function TradeOfferCard({ offer, teams, selected, latest }: { offer: Offer; teams: Team[]; selected: boolean; latest: boolean }) {
   const teamName = (id: string) => teams.find(team => team.id === id)?.name || 'Unknown team';
@@ -107,6 +134,7 @@ export default function DecisionFeed({ events, teams, api }: { events: DecisionE
         {isTrade ? <h3 className="decision-trade-title">{event.team?.name || 'A manager'} {tradeAction(event.event_type)}{recipient && <> with {recipient.name}</>}</h3> : <><strong className="decision-kind">{label(event.event_type)}</strong>{(event.team || event.player) && <p className="decision-participants">{event.team?.name}{event.player && `${event.team ? ' · ' : ''}${event.player.full_name}`}</p>}</>}
         {event.dropped_player && <p>Dropped: {event.dropped_player.full_name} · {event.dropped_player.position}</p>}
         {commentary && (isTrade ? <div className="decision-explanation"><span>{event.team?.name || 'Manager'}’s explanation</span><p>{commentary}</p></div> : <p>{commentary}</p>)}
+        {!!event.data.research?.length && <ResearchTrail steps={event.data.research} />}
         {event.aggregate_type === 'TRADE' && event.aggregate_id && <TradeDetails api={api} tradeId={event.aggregate_id} offerId={event.data.offer_id} teams={teams} />}
       </div>
     </article>;

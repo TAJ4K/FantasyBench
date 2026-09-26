@@ -22,6 +22,9 @@ class LLMRequest:
     temperature: float | None = None
     max_tokens: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    tools: list[dict[str, Any]] = field(default_factory=list)
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    allow_tool_calls: bool = True
 
 
 @dataclass(frozen=True)
@@ -33,7 +36,14 @@ class LLMResult:
     output_tokens: int = 0
     reasoning_tokens: int = 0
     cost_usd: float = 0.0
+    research: list[dict[str, Any]] = field(default_factory=list)
 
 
 class LLMProvider(Protocol):
     async def decide(self, request: LLMRequest) -> LLMResult: ...
+
+
+class ToolCallsDecision(BaseModel):
+    """An intermediate provider turn, never an executable roster decision."""
+
+    tool_calls: list[dict[str, Any]]

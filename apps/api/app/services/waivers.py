@@ -12,6 +12,7 @@ from app.core.errors import ConflictError, NotFoundError
 from app.models.base import utcnow
 from app.models.entities import (
     League,
+    LeagueEvent,
     Player,
     RosterAssignment,
     Team,
@@ -336,6 +337,16 @@ def process_waivers(
 
     period.status = "PROCESSED"
     period.processed_at = now
+    # Research and claim rationales remain sealed until this period has processed.
+    for event in db.scalars(
+        select(LeagueEvent).where(
+            LeagueEvent.league_id == period.league_id,
+            LeagueEvent.event_type == "WAIVER_SUBMITTED",
+            LeagueEvent.visibility == "PRIVATE",
+        )
+    ):
+        if (event.data or {}).get("period_id") == period.id:
+            event.visibility = "PUBLIC"
     db.flush()
     return list(
         db.scalars(

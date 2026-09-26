@@ -171,3 +171,36 @@ async def test_openrouter_retries_timeout_then_fails_clearly() -> None:
         await client.aclose()
     assert failed.value.retryable is True
     assert calls == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "call",
+    [
+        {"function": {"name": "player_profile", "arguments": "{}"}},
+        {"id": "x", "function": {"name": "player_profile", "arguments": {}}},
+    ],
+)
+async def test_malformed_native_tool_calls_are_audited_as_response_errors(call):
+    def handler(request):
+        return httpx.Response(200, json={"choices": [{"message": {"tool_calls": [call]}}]})
+
+    provider, client = await _provider(handler)
+    try:
+        with pytest.raises(LLMResponseError, match="Malformed tool call"):
+            await provider.decide(
+                replace(
+                    _request(),
+                    tools=[
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "player_profile",
+                                "parameters": {"type": "object", "properties": {}},
+                            },
+                        }
+                    ],
+                )
+            )
+    finally:
+        await client.aclose()

@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.agents.performance import PerformanceSnapshot
 from app.core.errors import NotFoundError
 from app.models.entities import (
     League,
@@ -36,6 +37,7 @@ class LeagueToolbox:
         self.db = db
         self.league_id = league_id
         self.team_id = team_id
+        self._performance: PerformanceSnapshot | None = None
         team = db.get(Team, team_id)
         if team is None or team.league_id != league_id:
             raise NotFoundError("team", team_id)
@@ -73,6 +75,7 @@ class LeagueToolbox:
                 "projection": (player.metadata_json or {}).get("projection"),
                 "slot_type": assignment.slot_type,
                 "position_slot": assignment.position_slot,
+                "performance": self.performance.summary(player.id),
                 "locked": RosterService(self.db).is_player_locked(self._league(), player),
             }
             for assignment, player in rows
@@ -89,10 +92,11 @@ class LeagueToolbox:
             query = query.where(Player.position == position.upper())
         query = query.where(Player.position.in_(("QB", "RB", "WR", "TE", "K", "DST")))
         players = list(self.db.scalars(query))
-        # Select candidates before truncation, using the same rank signal as the draft.
+        # Prefer recent production; use search rank as a fallback before truncation.
         players.sort(
             key=lambda p: (
                 not bool(p.nfl_team),
+                -(self.performance.summary(p.id)["last_3_games_average"] or 0),
                 int((p.metadata_json or {}).get("rank") or 10**9),
                 p.full_name,
                 p.id,
@@ -320,6 +324,12 @@ class LeagueToolbox:
     def reject_trade(self, offer_id: str) -> TradeThread:
         return reject_trade(self.db, offer_id=offer_id, rejecting_team_id=self.team_id)
 
+    @property
+    def performance(self) -> PerformanceSnapshot:
+        if self._performance is None:
+            self._performance = PerformanceSnapshot(self.db, self._league())
+        return self._performance
+
     def _league(self) -> League:
         league = self.db.get(League, self.league_id)
         if not league:
@@ -338,8 +348,7 @@ class LeagueToolbox:
             raise NotFoundError("player", player_id)
         return player
 
-    @staticmethod
-    def _player_summary(player: Player) -> dict[str, Any]:
+    def _player_summary(self, player: Player) -> dict[str, Any]:
         return {
             "player_id": player.id,
             "name": player.full_name,
@@ -352,4 +361,5 @@ class LeagueToolbox:
             "rank": (player.metadata_json or {}).get("rank", 10**9),
             "projection": (player.metadata_json or {}).get("projection"),
             "metadata": player.metadata_json,
+            "performance": self.performance.summary(player.id),
         }

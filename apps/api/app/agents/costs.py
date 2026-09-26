@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 
 from app.agents.contracts import LLMRequest
@@ -37,7 +38,12 @@ def estimate_request_cost(request: LLMRequest) -> Decimal | None:
         return None
     # Four characters/token is a common approximation. Add 20% for message,
     # schema, and provider framing, then assume the full output cap is consumed.
-    prompt_chars = len(request.system_prompt) + len(request.user_prompt)
+    prompt_chars = (
+        len(request.system_prompt)
+        + len(request.user_prompt)
+        + len(json.dumps(request.messages))
+        + len(json.dumps(request.tools))
+    )
     input_tokens = max(1, (prompt_chars + 3) // 4)
     input_tokens = (input_tokens * 6 + 4) // 5
     output_tokens = max(1, request.max_tokens or 1200)

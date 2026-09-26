@@ -33,7 +33,7 @@ async def test_admin_message_and_availability_reach_every_manager(engine):
     for request in captured:
         assert message in request.user_prompt
         assert AVAILABILITY_GUIDANCE in request.system_prompt
-        assert request.prompt_version == "lineup_v3"
+        assert request.prompt_version == "lineup_v4"
 
 
 def test_lineup_review_accepts_admin_message(app_client, admin_headers, monkeypatch):

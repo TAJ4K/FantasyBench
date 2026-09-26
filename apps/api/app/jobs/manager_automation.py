@@ -93,6 +93,7 @@ class ManagerAutomation:
                 .where(RosterAssignment.team_id == team_id)
             ).all()
             roster_service = RosterService(db)
+            toolbox = LeagueToolbox(db, league_id, team_id)
             context = {
                 "week": week,
                 "team_id": team_id,
@@ -122,6 +123,7 @@ class ManagerAutomation:
                         "bye_week": player.bye_week,
                         "projection": (player.metadata_json or {}).get("projection"),
                         "rank": (player.metadata_json or {}).get("rank", 10**9),
+                        "performance": toolbox.performance.summary(player.id),
                         "locked": roster_service.is_player_locked(league, player),
                     }
                     for assignment, player in rows
@@ -162,7 +164,7 @@ class ManagerAutomation:
                 aggregate_type="TEAM",
                 aggregate_id=team_id,
                 team_id=team_id,
-                data={"week": week, "lineup": decision.lineup},
+                data={"week": week, "lineup": decision.lineup, "research": result.research},
                 commentary=decision.public_reasoning,
             )
             db.commit()
@@ -247,7 +249,7 @@ class ManagerAutomation:
                 period.league_id,
                 "WAIVER_SUBMITTED",
                 team_id=team_id,
-                data={"period_id": period_id, "claims": len(claims)},
+                data={"period_id": period_id, "claims": len(claims), "research": result.research},
                 commentary=decision.public_reasoning,
                 visibility="PRIVATE",
             )
@@ -300,7 +302,7 @@ class ManagerAutomation:
                 team,
                 league_id,
                 "FREE_AGENT",
-                "free_agent_v1",
+                "free_agent_v2",
                 prompt.system,
                 prompt.user,
                 WaiverDecision,
@@ -310,6 +312,10 @@ class ManagerAutomation:
             result = await self._invocation(db).invoke(request)
             decision = WaiverDecision.model_validate(result.parsed)
         if not decision.claims:
+            self._record_review(league_id, team_id, "PLAYER_MARKET_REVIEWED", result)
+            self._record_memory(
+                league_id, team_id, f"Free-agent review: {decision.public_reasoning}"
+            )
             return False
         claim = min(decision.claims, key=lambda claim: claim.priority)
         with self.session_factory() as db:
@@ -335,6 +341,7 @@ class ManagerAutomation:
                     "player_id": assignment.player_id,
                     "drop_player_id": claim.drop_player_id,
                     "source": "MANAGER_FREE_AGENT_REVIEW",
+                    "research": result.research,
                 },
                 commentary=decision.public_reasoning,
             )
@@ -471,7 +478,7 @@ class ManagerAutomation:
                 team,
                 league_id,
                 "TRADE_RESPONSE",
-                "trade_response_v1",
+                "trade_response_v2",
                 prompt.system,
                 prompt.user,
                 TradeResponseDecision,
@@ -525,6 +532,7 @@ class ManagerAutomation:
                     aggregate_id=thread.id,
                     team_id=team.id,
                     commentary=decision.public_reasoning,
+                    data={"research": result.research},
                 )
                 db.commit()
         except ConflictError as exc:
@@ -583,7 +591,7 @@ class ManagerAutomation:
                 team,
                 league_id,
                 "TRADE_PROPOSAL",
-                "trade_proposal_v1",
+                "trade_proposal_v2",
                 prompt.system,
                 prompt.user,
                 TradeProposalDecision,
@@ -593,6 +601,8 @@ class ManagerAutomation:
             result = await self._invoke_trade(db, request)
             decision = TradeProposalDecision.model_validate(result.parsed)
         if decision.action == "pass":
+            self._record_review(league_id, team_id, "TRADE_REVIEWED", result)
+            self._record_memory(league_id, team_id, f"Trade review: {decision.public_reasoning}")
             return False
         assert decision.to_team_id is not None
         with self.session_factory() as db:
@@ -614,7 +624,11 @@ class ManagerAutomation:
                 aggregate_type="TRADE",
                 aggregate_id=thread.id,
                 team_id=team_id,
-                data={"offer_id": offer.id, "to_team_id": decision.to_team_id},
+                data={
+                    "offer_id": offer.id,
+                    "to_team_id": decision.to_team_id,
+                    "research": result.research,
+                },
                 commentary=decision.public_reasoning,
             )
             db.commit()
@@ -669,10 +683,25 @@ class ManagerAutomation:
                 extra={"league_id": league_id, "team_id": team_id},
             )
 
+    def _record_review(
+        self, league_id: str, team_id: str, event_type: str, result: LLMResult
+    ) -> None:
+        with self.session_factory() as db:
+            emit_event(
+                db,
+                league_id,
+                event_type,
+                team_id=team_id,
+                data={"research": result.research},
+                commentary=result.parsed.model_dump().get("public_reasoning"),
+            )
+            db.commit()
+
     def _invocation(self, db: Session) -> LLMInvocationService:
         return LLMInvocationService(
             db,
             self.provider,
+            research_rounds=self.settings.manager_research_rounds,
         )
 
 

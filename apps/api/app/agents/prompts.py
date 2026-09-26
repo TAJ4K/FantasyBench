@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-MANAGER_SYSTEM_VERSION = "manager_system_v3"
+MANAGER_SYSTEM_VERSION = "manager_system_v4"
 
 AVAILABILITY_GUIDANCE = """Evaluate NFL team, status, and injury_status before choosing players.
 Active roster here means the starting lineup; bench stashes are a separate strategic decision.
@@ -20,13 +20,19 @@ designation alone does not prove availability. Check bye weeks too. Preserve alr
 assignments exactly. If no playable replacement exists, explain the roster shortage in your public
 rationale rather than claiming the unavailable player is healthy. Retaining an unavailable player
 on the bench can be deliberate, but evaluate the cost and explain material availability risks.
-Search rank measures search popularity, not projected production or proof of availability."""
+Performance uses this league's scoring rules. Season totals and positional ranks exclude the
+current week; current_week_points is separate and may be incomplete. Points per recorded game
+and recent averages use only available stat rows, not assumed zeroes for missing games. Check
+games_with_stats and timestamps: null means unknown, not zero. Sleeper-sourced stats are
+provisional until final publication. Small samples and injuries need context; do not chase one
+big game or mistake a bye for a decline. Search rank measures popularity, not production."""
 
 MANAGER_SYSTEM_PROMPT = (
     """You manage exactly one fantasy football franchise. Act only in
 that franchise's competitive interest. Never collude, dump roster value, coordinate standings,
 or make reciprocal arrangements to benefit another team. Use only the supplied league data.
-Return only the requested JSON object. Give a concise public-facing rationale, but do not reveal
+Use supplied read-only research tools when useful, then return the requested final JSON object.
+Give a concise public-facing rationale, but do not reveal
 private chain-of-thought, hidden reasoning, or internal scratch work."""
     + "\n"
     + AVAILABILITY_GUIDANCE
@@ -42,9 +48,9 @@ class Prompt:
 
 DECISION_VERSIONS = {
     "draft": "draft_v3",
-    "waiver": "waiver_v3",
-    "lineup": "lineup_v3",
-    "trade": "trade_v3",
+    "waiver": "waiver_v4",
+    "lineup": "lineup_v4",
+    "trade": "trade_v4",
     "memory": "memory_v1",
 }
 
@@ -85,7 +91,7 @@ def build_prompt(decision_type: str, context: dict[str, Any]) -> Prompt:
             "For a response, copy offer.offer_id exactly. If can_counter is false, accept or "
             "reject; do not counter. For accept/reject return empty send and receive arrays. "
             "Keep message and public_reasoning to one or two short sentences each. "
-            "Return only the JSON decision, without roster dumps or analysis."
+            "After any research, return only the JSON decision, without roster dumps or analysis."
         ),
         "memory": "Summarize durable strategy; do not include hidden reasoning or sensitive data.",
     }.get(kind, "Make the requested legal fantasy-football decision.")

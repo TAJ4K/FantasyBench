@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     auto_resume_draft: bool = True
     draft_runner_lease_seconds: float = Field(default=180.0, gt=10)
     draft_runner_heartbeat_seconds: float = Field(default=15.0, gt=0)
+    manager_research_rounds: int = Field(default=3, ge=0, le=3)
     max_trade_negotiation_rounds: int = 4
     scheduler_poll_seconds: float = 5.0
     job_lease_seconds: float = Field(default=600.0, gt=10)

@@ -10,8 +10,9 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
+from pydantic import BaseModel
 
-from app.agents.contracts import LLMRequest, LLMResult
+from app.agents.contracts import LLMRequest, LLMResult, ToolCallsDecision
 from app.agents.errors import LLMProviderError, LLMResponseError
 
 logger = logging.getLogger(__name__)
@@ -101,7 +102,17 @@ class OpenRouterProvider:
                     "cache_control": {"type": "ephemeral"},
                 }
             ]
-        payload["reasoning"] = {"effort": request.reasoning_effort or "low", "exclude": True}
+        payload["messages"].extend(request.messages)
+        if request.tools:
+            payload["tools"] = request.tools
+            payload["tool_choice"] = "auto" if request.allow_tool_calls else "none"
+            # Let research turns call functions; enforce the decision schema on the final turn.
+            if request.allow_tool_calls:
+                payload.pop("response_format", None)
+        payload["reasoning"] = {
+            "effort": request.reasoning_effort or "low",
+            "exclude": not bool(request.tools),
+        }
         if request.temperature is not None and not request.model.startswith(
             ("openai/gpt-5", "openai/gpt-6")
         ):
@@ -161,14 +172,32 @@ class OpenRouterProvider:
             body = response.json()
             choice = body["choices"][0]
             message = choice["message"]
+            parsed: BaseModel
             content = message.get("content")
-            if isinstance(content, str):
-                decision_data = json.loads(content)
+            if message.get("tool_calls"):
+                if not request.tools or not request.allow_tool_calls:
+                    raise ValueError("Tool calls are not allowed on this turn")
+                calls = message["tool_calls"]
+                if not isinstance(calls, list) or len(calls) > 20:
+                    raise ValueError("Invalid tool call list")
+                for call in calls:
+                    function = call.get("function", {}) if isinstance(call, dict) else {}
+                    if (
+                        not isinstance(call, dict)
+                        or not isinstance(call.get("id"), str)
+                        or not call["id"]
+                        or not isinstance(function, dict)
+                        or not isinstance(function.get("name"), str)
+                        or not isinstance(function.get("arguments"), str)
+                    ):
+                        raise ValueError("Malformed tool call")
+                parsed = ToolCallsDecision(tool_calls=calls)
+            elif isinstance(content, str):
+                parsed = request.response_model.model_validate(json.loads(content))
             elif isinstance(content, dict):
-                decision_data = content
+                parsed = request.response_model.model_validate(content)
             else:
                 raise TypeError("message content is not JSON")
-            parsed = request.response_model.model_validate(decision_data)
         except (
             KeyError,
             IndexError,

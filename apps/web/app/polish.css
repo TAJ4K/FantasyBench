@@ -292,3 +292,12 @@ body { line-height: 1.5; }
 @media (prefers-reduced-motion: reduce) {
   :is(a, button, select) { transition: none; }
 }
+
+.manager-research { margin-top: 1rem; padding: .8rem 1rem; border: 1px solid #d7ddd7; border-radius: .6rem; }
+.manager-research summary { cursor: pointer; font-weight: 600; }
+.manager-research .research-note { font-size: .85rem; opacity: .7; margin: .8rem 0; }
+.manager-research ol { padding-left: 1.2rem; }
+.manager-research ol > li { margin-top: .8rem; }
+.manager-research ul { list-style: none; padding: 0; margin: .4rem 0; }
+.manager-research ul li { display: flex; flex-direction: column; gap: .15rem; padding: .3rem 0; }
+.manager-research small { opacity: .7; }
