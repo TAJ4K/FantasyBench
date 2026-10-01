@@ -14,6 +14,7 @@ from app.agents.contracts import LLMProvider, LLMRequest, LLMResult, ToolCallsDe
 from app.agents.costs import estimate_request_cost
 from app.agents.errors import LLMProviderError, LLMResponseError
 from app.agents.memory import ManagerMemoryService
+from app.agents.prompt_context import TABLE_GUIDANCE, compact_context
 from app.agents.research import ManagerResearch, definitions
 from app.agents.tools import LeagueToolbox
 from app.core.errors import DomainError
@@ -51,6 +52,8 @@ class LLMInvocationService:
         request = replace(
             request,
             tools=definitions(),
+            system_prompt=(request.system_prompt if TABLE_GUIDANCE in request.system_prompt
+                           else request.system_prompt + "\n" + TABLE_GUIDANCE),
             user_prompt=request.user_prompt
             + "\nUse the read-only research tools if needed before your final JSON decision. "
             "Investigate meaningful uncertainties: compare performance, find alternatives, check "
@@ -124,7 +127,9 @@ class LLMInvocationService:
                     {
                         "role": "tool",
                         "tool_call_id": call["id"],
-                        "content": json.dumps(output, separators=(",", ":"), default=str),
+                        "content": json.dumps(
+                            compact_context(output), separators=(",", ":"), default=str,
+                        ),
                     }
                 )
         raise LLMResponseError("Research did not produce a final decision.")

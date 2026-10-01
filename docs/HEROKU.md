@@ -50,7 +50,12 @@ code does not change the OpenRouter account or API-key limits.
 Scheduled reviews checkpoint each manager action in `job_runs.details`. On partial
 failure or restart, retries skip managers and trade offers already completed in that
 job, including decisions to pass. Checkpoints verify the current job attempt before
-writing. This does not deduplicate distinct scheduled review windows or manual reviews.
+writing. Scheduled lineup reviews also reuse a completed review for up to 24 hours
+when its inputs are unchanged. Durable fingerprints in `teams.manager_state` include
+rosters, assignments, injuries (including NFL teammates), statistics, stored news,
+kickoffs, week, scoring and model configuration; telemetry-only timestamp refreshes
+do not invalidate them. Concurrent lineup jobs share a per-team lock in the supported
+single-worker deployment. Manual commissioner reviews always bypass reuse.
 An abrupt process failure between a committed action and its checkpoint can still
 repeat that action's review; domain-level transaction guards remain in place.
 
@@ -60,6 +65,18 @@ Single Markdown fences around valid decision JSON are accepted locally, avoiding
 paid retry; the original response schema and all transaction validations still apply.
 Raw responses and usage remain in the audit. No cheaper model substitutions or new
 spending caps are enabled by these changes.
+
+`MANAGER_RESEARCH_ROUNDS` defaults to 1 (configurable 0–3): managers can batch up to
+six lookups in one round, then must decide. Research replies use the same compact
+tables as initial context, while public and audit evidence retains its original form.
+
+`TRADE_REVIEW_INTERVAL_HOURS=24` continues to check outstanding offers. New speculative
+proposals use a separate per-manager `TRADE_PROPOSAL_INTERVAL_HOURS=72` cooldown;
+responses/counters to existing offers are unaffected. An unchanged proposal context
+can be reused for up to seven days, and a new league week or model/policy change
+invalidates reuse. On upgrade, completed trade-review/proposal events since the
+current `WEEK_STARTED` event establish the initial cooldown. Failed decisions do not
+establish a successful review. Skips are visible in the scheduled job's details.
 
 The September 26 manager upgrade uses `openai/gpt-6-sol`,
 `anthropic/claude-opus-5.5`, `google/gemini-3.8-flash`,

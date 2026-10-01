@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import replace
+from functools import partial
 from typing import Any
 
 from sqlalchemy import select
@@ -17,6 +18,7 @@ from app.agents.tools import LeagueToolbox
 from app.core.config import Settings
 from app.core.errors import ConflictError
 from app.jobs.progress import ManagerJobProgress
+from app.jobs.review_cache import ScheduledReviews
 from app.models.base import utcnow
 from app.models.entities import (
     League,
@@ -55,6 +57,7 @@ class ManagerAutomation:
         self.session_factory = session_factory
         self.provider = provider
         self.settings = settings
+        self.scheduled_reviews = ScheduledReviews(session_factory, settings)
 
     async def set_all_lineups(
         self,
@@ -77,8 +80,16 @@ class ManagerAutomation:
             if progress and progress.complete(team_id):
                 continue
             try:
-                await self._set_team_lineup(league_id, team_id, week, admin_message=admin_message)
-                results[team_id] = "COMPLETE"
+                if progress and not admin_message:
+                    results[team_id] = await self.scheduled_reviews.run(
+                        team_id, "LINEUP",
+                        partial(self._set_team_lineup, league_id, team_id, week),
+                    )
+                else:
+                    await self._set_team_lineup(
+                        league_id, team_id, week, admin_message=admin_message,
+                    )
+                    results[team_id] = "COMPLETE"
             except Exception as exc:
                 results[team_id] = f"FAILED: {exc}"
                 logger.exception(
@@ -430,8 +441,14 @@ class ManagerAutomation:
             if progress and progress.complete(f"team:{team_id}"):
                 continue
             try:
-                proposed = await self._consider_trade_proposal(league_id, team_id)
-                results[f"team:{team_id}"] = "PROPOSED" if proposed else "PASS"
+                if progress:
+                    results[f"team:{team_id}"] = await self.scheduled_reviews.run(
+                        team_id, "TRADE_PROPOSAL",
+                        partial(self._consider_trade_proposal, league_id, team_id),
+                    )
+                else:
+                    proposed = await self._consider_trade_proposal(league_id, team_id)
+                    results[f"team:{team_id}"] = "PROPOSED" if proposed else "PASS"
             except Exception as exc:
                 results[f"team:{team_id}"] = f"FAILED: {exc}"
                 logger.exception(

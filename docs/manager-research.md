@@ -3,7 +3,7 @@
 Roster, waiver, free-agent and trade prompts include a compact performance snapshot.
 Points are calculated from PlayerWeekStat using the league's current scoring configuration,
 including free agents. No external requests occur during these lookups.
-Repeated records in initial prompts use shared-column tables, with nested key paths
+Repeated records in initial prompts and research replies use shared-column tables, with nested key paths
 explained in the prompt. This is a lossless encoding: full context remains in audit
 metadata, and all candidates, null/zero distinctions, stats and provenance are retained.
 
@@ -20,8 +20,8 @@ statistics, team needs, and stored teammate injuries/depth metadata. Stored news
 when present; there is no live news search and missing news does not imply health.
 
 Research is read-only, validates arguments, and restricts fantasy rosters to the current
-league. Each review allows at most three research rounds and six lookups before requiring
-its original structured decision. MANAGER_RESEARCH_ROUNDS can reduce this to 0–3.
+league. Each review defaults to one research round with up to six batched lookups before
+requiring its original structured decision. MANAGER_RESEARCH_ROUNDS is configurable from 0–3.
 The prompt reflects the configured round count, encourages batching independent
 lookups, and asks managers to decide directly when supplied evidence is sufficient.
 Every provider request has its own usage/cost audit record, including errors. Provider routes
@@ -38,3 +38,9 @@ research tools do not directly execute trades, queue fallback claims, or force r
 All actual transactions retain ownership, kickoff, roster-capacity and lineup validation.
 Scheduled job retries resume from per-manager and per-offer checkpoints, including
 passes, so a failed manager does not cause successful peers to repeat their research.
+Unchanged scheduled lineup inputs can reuse a successful review for up to 24 hours;
+new weeks, injuries, stats, stored news, roster changes and model settings invalidate it.
+Speculative trade proposals are considered no more than every 72 hours per manager
+within the same week/model configuration, and unchanged inputs can be reused for up
+to seven days. Existing offers still receive responses in the daily trade job.
+Manual commissioner reviews bypass these reuse and cooldown rules.

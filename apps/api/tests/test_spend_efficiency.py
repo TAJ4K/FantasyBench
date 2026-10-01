@@ -9,14 +9,17 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.orm import sessionmaker
 
+from app.agents.contracts import LLMRequest, LLMResult, ToolCallsDecision
 from app.agents.fake import DeterministicFakeProvider
 from app.agents.prompt_context import compact_context
 from app.agents.prompts import build_prompt
+from app.agents.service import LLMInvocationService
 from app.core.config import Settings
 from app.jobs.manager_automation import ManagerAutomation
 from app.jobs.progress import ManagerJobProgress
 from app.jobs.scheduler import LeagueScheduler
 from app.models.entities import JobRun
+from app.schemas.decisions import WaiverDecision
 from app.services.initialization import initialize_league
 from app.services.waivers import ensure_waiver_period
 
@@ -185,3 +188,48 @@ async def test_trade_retry_skips_expired_offer_and_completed_proposals(engine, d
     assert job.status == "COMPLETE"
     assert job.details["offer:expired-offer"] == "SKIPPED: offer no longer pending"
     provider.decide.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_default_research_batches_once_and_compacts_tool_evidence(db, monkeypatch):
+    league = initialize_league(db, nfl_season=2026)
+    db.commit()
+    evidence = {"players": roster(), "note": "Provisional; null is unknown"}
+    monkeypatch.setattr("app.agents.service.ManagerResearch.execute", lambda *args: evidence)
+    calls = []
+    signature = [{"type": "reasoning.encrypted", "data": "signature"}]
+
+    class Provider:
+        async def decide(self, request):
+            calls.append(request)
+            if len(calls) == 1:
+                assert request.allow_tool_calls
+                call = {
+                    "id": "lookup", "type": "function",
+                    "function": {"name": "nfl_team_context", "arguments": '{"nfl_team":"SEA"}'},
+                }
+                return LLMResult(
+                    parsed=ToolCallsDecision(tool_calls=[call]),
+                    raw_response={"choices": [{"message": {
+                        "role": "assistant", "tool_calls": [call], "reasoning_details": signature,
+                    }}]},
+                )
+            assert not request.allow_tool_calls
+            assert request.messages[-2]["reasoning_details"] == signature
+            compact = request.messages[-1]["content"]
+            assert expand(json.loads(compact)) == evidence
+            assert len(compact) < len(json.dumps(evidence, separators=(",", ":"))) * 0.65
+            return LLMResult(
+                parsed=WaiverDecision(claims=[], public_reasoning="Hold"), raw_response={},
+            )
+
+    result = await LLMInvocationService(
+        db, Provider(), research_rounds=Settings().manager_research_rounds,
+    ).invoke(LLMRequest(
+        league_id=league.id, team_id=league.teams[0].id,
+        model=league.teams[0].model_identifier, decision_type="FREE_AGENT",
+        prompt_version="test", system_prompt="system", user_prompt="Review",
+        response_model=WaiverDecision,
+    ))
+    assert len(calls) == 2
+    assert result.research[0]["result"] == evidence
