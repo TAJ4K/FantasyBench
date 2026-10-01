@@ -3,6 +3,9 @@
 Roster, waiver, free-agent and trade prompts include a compact performance snapshot.
 Points are calculated from PlayerWeekStat using the league's current scoring configuration,
 including free agents. No external requests occur during these lookups.
+Repeated records in initial prompts use shared-column tables, with nested key paths
+explained in the prompt. This is a lossless encoding: full context remains in audit
+metadata, and all candidates, null/zero distinctions, stats and provenance are retained.
 
 - Season points, position rank by total, and averages exclude the current league week.
 - Current-week points are separate and potentially incomplete.
@@ -19,6 +22,8 @@ when present; there is no live news search and missing news does not imply healt
 Research is read-only, validates arguments, and restricts fantasy rosters to the current
 league. Each review allows at most three research rounds and six lookups before requiring
 its original structured decision. MANAGER_RESEARCH_ROUNDS can reduce this to 0–3.
+The prompt reflects the configured round count, encourages batching independent
+lookups, and asks managers to decide directly when supplied evidence is sufficient.
 Every provider request has its own usage/cost audit record, including errors. Provider routes
 rejecting tool support with 400/404 can fall back to the initial performance snapshot.
 Provider credit errors are not bypassed.
@@ -31,3 +36,5 @@ Managers receive their own recent-decision memory, so an earlier trade review ca
 later waiver or free-agent review. Actions still follow the existing separate scheduler jobs:
 research tools do not directly execute trades, queue fallback claims, or force roster churn.
 All actual transactions retain ownership, kickoff, roster-capacity and lineup validation.
+Scheduled job retries resume from per-manager and per-offer checkpoints, including
+passes, so a failed manager does not cause successful peers to repeat their research.

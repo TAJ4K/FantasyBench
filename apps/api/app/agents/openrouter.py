@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import random
+import re
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable
@@ -81,7 +82,7 @@ class OpenRouterProvider:
                     "role": "user",
                     "content": request.user_prompt
                     + "\nReturn exactly this JSON schema: "
-                    + json.dumps(schema),
+                    + json.dumps(schema, separators=(",", ":")),
                 },
             ],
             "response_format": {
@@ -93,7 +94,6 @@ class OpenRouterProvider:
         # JSON mode still validates against the same Pydantic response model below.
         if request.decision_type.upper() == "LINEUP":
             payload["response_format"] = {"type": "json_object"}
-            payload["messages"][1]["content"] += "\nRequired JSON schema: " + json.dumps(schema)
         if request.model.startswith(("anthropic/", "qwen/")):
             payload["messages"][0]["content"] = [
                 {
@@ -193,7 +193,12 @@ class OpenRouterProvider:
                         raise ValueError("Malformed tool call")
                 parsed = ToolCallsDecision(tool_calls=calls)
             elif isinstance(content, str):
-                parsed = request.response_model.model_validate(json.loads(content))
+                # Some tool-capable routes wrap valid JSON in a single Markdown fence.
+                # Unwrap only the whole response, then apply the original strict validation.
+                fenced = re.fullmatch(r"\s*```(?:json)?\s*\n(.*?)\n\s*```\s*", content, re.S | re.I)
+                parsed = request.response_model.model_validate(
+                    json.loads(fenced.group(1) if fenced else content)
+                )
             elif isinstance(content, dict):
                 parsed = request.response_model.model_validate(content)
             else:

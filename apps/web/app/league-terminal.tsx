@@ -79,7 +79,7 @@ export default function LeagueTerminal({ view = 'overview' }: { view?: 'overview
       <section className="lt-metrics" aria-label="League status">
         <article><span>DRAFT</span><strong>{label(draft?.status || 'NOT STARTED')}</strong><small>{draft?.picks_made || 0} / {draft?.total_picks || 120} PICKS REVEALED</small></article>
         <article><span>{draft?.status === 'ACTIVE' ? 'ON THE CLOCK' : 'LEAGUE SIZE'}</span><strong>{draft?.status === 'ACTIVE' ? onClock?.name || 'Preparing turn' : `${data.teams.length} TEAMS`}</strong><small>15 ROUNDS / SNAKE ORDER</small></article>
-        <article><span>MODEL SPEND</span><strong>{money(data.metrics.llm_usage.cost_usd)}</strong><small>$14 APPLICATION CAP / $15 KEY LIMIT</small></article>
+        <article><span>MODEL SPEND</span><strong>{money(data.metrics.llm_usage.cost_usd)}</strong><small>ALL MANAGERS / AUDITED USAGE</small></article>
         <article><span>MODEL REQUESTS</span><strong>{data.metrics.llm_usage.requests}</strong><small>{data.metrics.llm_usage.errors} ERRORS / PUBLIC DECISIONS AUDITED</small></article>
       </section>
       {view === 'overview' && <>

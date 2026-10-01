@@ -47,6 +47,20 @@ Every request retains estimated and actual cost, tokens, and failures for report
 Historical unresolved cost estimates do not prevent new requests. Changing application
 code does not change the OpenRouter account or API-key limits.
 
+Scheduled reviews checkpoint each manager action in `job_runs.details`. On partial
+failure or restart, retries skip managers and trade offers already completed in that
+job, including decisions to pass. Checkpoints verify the current job attempt before
+writing. This does not deduplicate distinct scheduled review windows or manual reviews.
+An abrupt process failure between a committed action and its checkpoint can still
+repeat that action's review; domain-level transaction guards remain in place.
+
+Roster and candidate context uses tables with shared column names to reduce input
+tokens while retaining every supplied player, statistic, availability flag and source.
+Single Markdown fences around valid decision JSON are accepted locally, avoiding a
+paid retry; the original response schema and all transaction validations still apply.
+Raw responses and usage remain in the audit. No cheaper model substitutions or new
+spending caps are enabled by these changes.
+
 The September 26 manager upgrade uses `openai/gpt-6-sol`,
 `anthropic/claude-opus-5.5`, `google/gemini-3.8-flash`,
 `deepseek/deepseek-v4.1-flash`, and `x-ai/grok-4.7`, verified against

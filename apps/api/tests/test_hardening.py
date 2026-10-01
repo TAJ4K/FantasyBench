@@ -264,7 +264,7 @@ async def test_jobs_reclaim_expired_attempts_and_lineup_keys_are_per_kickoff() -
         job_retry_base_seconds=1,
     )
 
-    async def complete(*args: object) -> dict[str, str]:
+    async def complete(*args: object, **kwargs: object) -> dict[str, str]:
         return {}
 
     manager = SimpleNamespace(

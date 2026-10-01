@@ -155,6 +155,48 @@ async def test_openrouter_rejects_malformed_output() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("fence", ["```json", "```", "```JSON"])
+async def test_fenced_json_uses_original_schema_and_usage_without_retry(fence: str) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        body = _success(request).json()
+        message = body["choices"][0]["message"]
+        message["content"] = f"  {fence}\n{message['content']}\n```\n"
+        return httpx.Response(200, json=body)
+
+    provider, client = await _provider(handler)
+    try:
+        result = await provider.decide(_request())
+        assert result.parsed.player_id == "player-1"
+        assert result.cost_usd == 0.004
+        assert calls == 1
+        assert result.raw_response["choices"][0]["message"]["content"].startswith("  ```")
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content", [
+    '```json\n{"player_id":"only-one-field"}\n```',
+    '```json\n{broken}\n```',
+    'Here is my decision:\n```json\n{}\n```',
+    '```json\n{}\n```\n```json\n{}\n```',
+])
+async def test_fence_handling_still_rejects_invalid_or_ambiguous_decisions(content: str) -> None:
+    provider, client = await _provider(lambda request: httpx.Response(
+        200, json={"choices": [{"message": {"content": content}}]},
+    ))
+    try:
+        with pytest.raises(LLMResponseError):
+            await provider.decide(_request())
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_openrouter_retries_timeout_then_fails_clearly() -> None:
     calls = 0
 

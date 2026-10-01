@@ -16,6 +16,7 @@ from app.agents.service import LLMInvocationService
 from app.agents.tools import LeagueToolbox
 from app.core.config import Settings
 from app.core.errors import ConflictError
+from app.jobs.progress import ManagerJobProgress
 from app.models.base import utcnow
 from app.models.entities import (
     League,
@@ -56,7 +57,12 @@ class ManagerAutomation:
         self.settings = settings
 
     async def set_all_lineups(
-        self, league_id: str, week: int, *, admin_message: str | None = None
+        self,
+        league_id: str,
+        week: int,
+        *,
+        admin_message: str | None = None,
+        progress: ManagerJobProgress | None = None,
     ) -> dict[str, str]:
         with self.session_factory() as db:
             ensure_league_unlocked(db, league_id)
@@ -66,8 +72,10 @@ class ManagerAutomation:
                 )
             )
             db.commit()
-        results: dict[str, str] = {}
+        results: dict[str, str] = dict(progress.results) if progress else {}
         for team_id in team_ids:
+            if progress and progress.complete(team_id):
+                continue
             try:
                 await self._set_team_lineup(league_id, team_id, week, admin_message=admin_message)
                 results[team_id] = "COMPLETE"
@@ -77,6 +85,8 @@ class ManagerAutomation:
                     "lineup_decision_failed",
                     extra={"league_id": league_id, "team_id": team_id, "week": week},
                 )
+            if progress:
+                progress.record(team_id, results[team_id])
         return results
 
     async def _set_team_lineup(
@@ -175,7 +185,9 @@ class ManagerAutomation:
             valued_player_ids=list(decision.lineup.values()),
         )
 
-    async def collect_waiver_claims(self, waiver_period_id: str) -> dict[str, str]:
+    async def collect_waiver_claims(
+        self, waiver_period_id: str, *, progress: ManagerJobProgress | None = None
+    ) -> dict[str, str]:
         with self.session_factory() as db:
             period = db.get(WaiverPeriod, waiver_period_id)
             if not period or period.status != "OPEN":
@@ -191,15 +203,20 @@ class ManagerAutomation:
             db.commit()
 
         async def collect(team_id: str) -> tuple[str, str]:
+            if progress and progress.complete(team_id):
+                return team_id, progress.results[team_id]
             try:
                 await self._collect_team_waivers(period.id, team_id)
-                return team_id, "COMPLETE"
+                result = "COMPLETE"
             except Exception as exc:
                 logger.exception(
                     "waiver_decision_failed",
                     extra={"period_id": period.id, "team_id": team_id},
                 )
-                return team_id, f"FAILED: {exc}"
+                result = f"FAILED: {exc}"
+            if progress:
+                progress.record(team_id, result)
+            return team_id, result
 
         pairs = await asyncio.gather(*(collect(team.id) for team in teams))
         return dict(pairs)
@@ -261,7 +278,9 @@ class ManagerAutomation:
             valued_player_ids=[claim.add_player_id for claim in decision.claims],
         )
 
-    async def review_free_agents(self, league_id: str, week: int) -> dict[str, str]:
+    async def review_free_agents(
+        self, league_id: str, week: int, *, progress: ManagerJobProgress | None = None
+    ) -> dict[str, str]:
         with self.session_factory() as db:
             ensure_league_unlocked(db, league_id)
             team_ids = list(
@@ -270,8 +289,10 @@ class ManagerAutomation:
                 )
             )
             db.commit()
-        results: dict[str, str] = {}
+        results: dict[str, str] = dict(progress.results) if progress else {}
         for team_id in team_ids:
+            if progress and progress.complete(team_id):
+                continue
             try:
                 changed = await self._review_team_free_agents(league_id, team_id, week)
                 results[team_id] = "COMPLETE" if changed else "PASS"
@@ -281,6 +302,8 @@ class ManagerAutomation:
                     "free_agent_decision_failed",
                     extra={"league_id": league_id, "team_id": team_id, "week": week},
                 )
+            if progress:
+                progress.record(team_id, results[team_id])
         return results
 
     async def _review_team_free_agents(self, league_id: str, team_id: str, week: int) -> bool:
@@ -302,7 +325,7 @@ class ManagerAutomation:
                 team,
                 league_id,
                 "FREE_AGENT",
-                "free_agent_v2",
+                "free_agent_v3",
                 prompt.system,
                 prompt.user,
                 WaiverDecision,
@@ -354,7 +377,9 @@ class ManagerAutomation:
         )
         return True
 
-    async def review_trades(self, league_id: str) -> dict[str, str]:
+    async def review_trades(
+        self, league_id: str, *, progress: ManagerJobProgress | None = None
+    ) -> dict[str, str]:
         with self.session_factory() as db:
             ensure_league_unlocked(db, league_id)
             pending_offer_ids = list(
@@ -376,8 +401,20 @@ class ManagerAutomation:
                 )
             )
             db.commit()
-        results: dict[str, str] = {}
+        results: dict[str, str] = dict(progress.results) if progress else {}
+        # An offer may expire or be resolved by another action before a retry.
+        # Preserve its checkpoint without making another call for an obsolete offer.
+        for key, value in list(results.items()):
+            if (
+                key.startswith("offer:") and value.startswith("FAILED:")
+                and key.removeprefix("offer:") not in pending_offer_ids
+            ):
+                results[key] = "SKIPPED: offer no longer pending"
+                if progress:
+                    progress.record(key, results[key])
         for offer_id in pending_offer_ids:
+            if progress and progress.complete(f"offer:{offer_id}"):
+                continue
             try:
                 action = await self._respond_to_trade(league_id, offer_id)
                 results[f"offer:{offer_id}"] = action
@@ -387,7 +424,11 @@ class ManagerAutomation:
                     "trade_response_failed",
                     extra={"league_id": league_id, "offer_id": offer_id},
                 )
+            if progress:
+                progress.record(f"offer:{offer_id}", results[f"offer:{offer_id}"])
         for team_id in team_ids:
+            if progress and progress.complete(f"team:{team_id}"):
+                continue
             try:
                 proposed = await self._consider_trade_proposal(league_id, team_id)
                 results[f"team:{team_id}"] = "PROPOSED" if proposed else "PASS"
@@ -397,6 +438,8 @@ class ManagerAutomation:
                     "trade_proposal_failed",
                     extra={"league_id": league_id, "team_id": team_id},
                 )
+            if progress:
+                progress.record(f"team:{team_id}", results[f"team:{team_id}"])
         # Follow newly created offers and counters in this review, without repeatedly
         # invoking failed offers or generating another wave of proposals.
         seen = set(pending_offer_ids)
@@ -425,6 +468,8 @@ class ManagerAutomation:
                 except Exception as exc:
                     results[f"offer:{offer_id}"] = f"FAILED: {exc}"
                     logger.exception("trade_response_failed", extra={"offer_id": offer_id})
+                if progress:
+                    progress.record(f"offer:{offer_id}", results[f"offer:{offer_id}"])
         return results
 
     async def _respond_to_trade(
@@ -478,7 +523,7 @@ class ManagerAutomation:
                 team,
                 league_id,
                 "TRADE_RESPONSE",
-                "trade_response_v2",
+                "trade_response_v3",
                 prompt.system,
                 prompt.user,
                 TradeResponseDecision,
@@ -591,7 +636,7 @@ class ManagerAutomation:
                 team,
                 league_id,
                 "TRADE_PROPOSAL",
-                "trade_proposal_v2",
+                "trade_proposal_v3",
                 prompt.system,
                 prompt.user,
                 TradeProposalDecision,

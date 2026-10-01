@@ -4,6 +4,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from app.agents.prompt_context import TABLE_GUIDANCE, compact_context
+
 MANAGER_SYSTEM_VERSION = "manager_system_v4"
 
 AVAILABILITY_GUIDANCE = """Evaluate NFL team, status, and injury_status before choosing players.
@@ -48,9 +50,9 @@ class Prompt:
 
 DECISION_VERSIONS = {
     "draft": "draft_v3",
-    "waiver": "waiver_v4",
-    "lineup": "lineup_v4",
-    "trade": "trade_v4",
+    "waiver": "waiver_v5",
+    "lineup": "lineup_v5",
+    "trade": "trade_v5",
     "memory": "memory_v1",
 }
 
@@ -106,5 +108,8 @@ def build_prompt(decision_type: str, context: dict[str, Any]) -> Prompt:
             "search ranks, not expert projections or ADP. Evaluate position and roster needs.\n"
             + json.dumps(catalog, sort_keys=True, separators=(",", ":"), default=str)
         )
+    if kind in {"lineup", "waiver", "trade"}:
+        system += "\n" + TABLE_GUIDANCE
+        dynamic = compact_context(dynamic)
     payload = json.dumps(dynamic, sort_keys=True, separators=(",", ":"), default=str)
     return Prompt(version, system, f"{instructions}\nContext JSON:\n{payload}")

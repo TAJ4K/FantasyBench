@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.jobs.draft_runner import DraftRunner, runnable_draft_filter
 from app.jobs.manager_automation import ManagerAutomation
+from app.jobs.progress import ManagerJobProgress
 from app.models.base import utcnow
 from app.models.entities import (
     Draft,
@@ -477,16 +478,26 @@ class LeagueScheduler:
         attempt: int,
     ) -> None:
         try:
+            progress = (
+                ManagerJobProgress(self.session_factory, job_id, attempt)
+                if kind in {"lineup", "waiver", "free_agent", "trade"} else None
+            )
             if kind == "lineup":
                 assert week is not None
-                operation = self.manager_automation.set_all_lineups(target_id, week)
+                operation = self.manager_automation.set_all_lineups(
+                    target_id, week, progress=progress,
+                )
             elif kind == "waiver":
-                operation = self.manager_automation.collect_waiver_claims(target_id)
+                operation = self.manager_automation.collect_waiver_claims(
+                    target_id, progress=progress,
+                )
             elif kind == "free_agent":
                 assert week is not None
-                operation = self.manager_automation.review_free_agents(target_id, week)
+                operation = self.manager_automation.review_free_agents(
+                    target_id, week, progress=progress,
+                )
             elif kind == "trade":
-                operation = self.manager_automation.review_trades(target_id)
+                operation = self.manager_automation.review_trades(target_id, progress=progress)
             elif kind == "nfl_schedule":
                 operation = self._sync_schedule(target_id)
             elif kind == "nfl_players":

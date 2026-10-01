@@ -55,7 +55,9 @@ class LLMInvocationService:
             + "\nUse the read-only research tools if needed before your final JSON decision. "
             "Investigate meaningful uncertainties: compare performance, find alternatives, check "
             "NFL teammates (especially the QB), and inspect a potential trade partner's needs. "
-            "You have at most 3 research rounds and 6 tool calls. You may decide sooner. "
+            f"You have at most {self.research_rounds} research rounds and 6 tool calls. "
+            "Decide immediately when the supplied evidence is sufficient. Batch independent "
+            "lookups into one round; do not request data already present in the context. "
             "Tools cannot make roster moves. Return the original decision schema when finished. "
             "Use your prior decisions to connect trade targets with later waiver alternatives. "
             "Perform only the requested action type; pending trades are not certain. "
@@ -122,7 +124,7 @@ class LLMInvocationService:
                     {
                         "role": "tool",
                         "tool_call_id": call["id"],
-                        "content": json.dumps(output, default=str),
+                        "content": json.dumps(output, separators=(",", ":"), default=str),
                     }
                 )
         raise LLMResponseError("Research did not produce a final decision.")
